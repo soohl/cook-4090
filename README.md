@@ -18,7 +18,7 @@ Place the model files at these ignored paths:
 ```text
 models/qwen3_8_27b.ninfer
 models/Qwen3.8-27B-UD-IQ4_XS.gguf
-models/MTP/mtp-Qwen3.8-27B-Q4_0.gguf
+models/mtp-Qwen3.8-27B-Q4_0.gguf
 models/mmproj-Qwen3.8-27B-Q8_0.gguf
 ```
 
