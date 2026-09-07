@@ -1,0 +1,7 @@
+[submodule "backends/ninfer"]
+	path = backends/ninfer
+	url = https://github.com/soohl/ninfer.git
+	branch = master
+[submodule "backends/llamacpp"]
+	path = backends/llamacpp
+	url = https://github.com/ggml-org/llama.cpp.git

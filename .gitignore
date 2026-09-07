@@ -1,0 +1,10 @@
+**/.deps
+/models/
+/results/
+/build/
+__pycache__/
+*.py[cod]
+*.gguf
+*.ninfer
+*.safetensors
+*.log
