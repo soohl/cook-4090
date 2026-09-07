@@ -1,42 +1,41 @@
-2026-09-07 17:04:13.044  INFO  starting engine
-2026-09-07 17:04:13.154  INFO  loading weights | 16.9 GiB
-2026-09-07 17:04:15.660  INFO  weights ready | 16.9 GiB | 2.5s | 6.76 GiB/s
-2026-09-07 17:04:16.238  INFO  CUDA graphs ready | 330 ms
-2026-09-07 17:04:16.239  INFO  engine ready | qwen3.8-27b/groupwise-int | total 3.2s | weights 16.9 GiB
-2026-09-07 17:04:16.239  INFO  capacity | KV 262,144 tokens, e8, explicit | pages 4,096/4,096 | runtime 5.16 GiB | free 393.3 MiB
-2026-09-07 17:04:16.239  INFO  context cache | 1 active + 0 cached device states | host 0 states, 0 B KV | private 2 | shared 4 | anchors 2
-2026-09-07 17:04:16.239  INFO  media | 16 preprocess workers | cache 1.00 GiB | live 2.00 GiB
-2026-09-07 17:04:16.394  INFO  listening on http://127.0.0.1:45435 | model qwen3.8-27b | auth disabled
-2026-09-07 17:04:16.489  INFO  req#1 started | openai-chat stream | 2 messages | max output 256 | thinking off | preserve thinking
-2026-09-07 17:04:21.395  INFO  throughput | 5.0s | prefill 3.48k tok/s (17,408 tok) | running 1 (prefill 1) | host 23.1% (1.2s)
-2026-09-07 17:04:26.395  INFO  throughput | 5.0s | prefill 3.07k tok/s (15,360 tok) | running 1 (prefill 1) | host 22.3% (1.1s)
-2026-09-07 17:04:31.395  INFO  throughput | 5.0s | prefill 2.87k tok/s (14,336 tok) | running 1 (prefill 1) | host 22.7% (1.1s)
-2026-09-07 17:04:36.394  INFO  throughput | 5.0s | prefill 2.46k tok/s (12,288 tok) | running 1 (prefill 1) | host 20.9% (1.0s)
-2026-09-07 17:04:41.395  INFO  throughput | 5.0s | prefill 2.46k tok/s (12,288 tok) | running 1 (prefill 1) | host 22.2% (1.1s)
-2026-09-07 17:04:46.395  INFO  throughput | 5.0s | prefill 2.25k tok/s (11,264 tok) | running 1 (prefill 1) | host 21.5% (1.1s)
-2026-09-07 17:04:51.395  INFO  throughput | 5.0s | prefill 2.25k tok/s (11,264 tok) | running 1 (prefill 1) | host 22.6% (1.1s)
-2026-09-07 17:04:56.395  INFO  throughput | 5.0s | prefill 2.05k tok/s (10,240 tok) | running 1 (prefill 1) | host 21.6% (1.1s)
-2026-09-07 17:05:01.395  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 20.2% (1.0s)
-2026-09-07 17:05:06.395  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 20.9% (1.0s)
-2026-09-07 17:05:11.395  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 21.7% (1.1s)
-2026-09-07 17:05:16.395  INFO  throughput | 5.0s | prefill 1.64k tok/s (8,192 tok) | running 1 (prefill 1) | host 19.9% (994 ms)
-2026-09-07 17:05:21.395  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 23.1% (1.2s)
-2026-09-07 17:05:26.395  INFO  throughput | 5.0s | prefill 1.64k tok/s (8,192 tok) | running 1 (prefill 1) | host 21.1% (1.1s)
-2026-09-07 17:05:31.395  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 19.0% (949 ms)
-2026-09-07 17:05:36.394  INFO  throughput | 5.0s | prefill 1.64k tok/s (8,192 tok) | running 1 (prefill 1) | host 22.2% (1.1s)
-2026-09-07 17:05:41.394  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 19.9% (995 ms)
-2026-09-07 17:05:46.395  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 20.4% (1.0s)
-2026-09-07 17:05:51.395  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 20.8% (1.0s)
-2026-09-07 17:05:56.395  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 21.2% (1.1s)
-2026-09-07 17:06:01.395  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 21.7% (1.1s)
-2026-09-07 17:06:06.395  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 18.9% (947 ms)
-2026-09-07 17:06:11.395  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 19.3% (964 ms)
-2026-09-07 17:06:16.395  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 22.9% (1.1s)
-2026-09-07 17:06:21.395  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 20.0% (1000 ms)
-2026-09-07 17:06:26.395  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 20.3% (1.0s)
-2026-09-07 17:06:31.395  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 20.6% (1.0s)
-2026-09-07 17:06:36.395  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 21.0% (1.0s)
-2026-09-07 17:06:41.395  INFO  throughput | 5.0s | prefill 1.02k tok/s (5,120 tok) | running 1 (prefill 1) | host 17.7% (884 ms)
-2026-09-07 17:06:46.395  INFO  throughput | 5.0s | prefill 413.2 tok/s (2,066 tok) | decode 50.8 tok/s (254 tok) | running 1 (decode-ready 1) | batch 1.00 | host 7.9% (396 ms)
-2026-09-07 17:06:46.426  INFO  req#1 done | openai-chat | output limit | prompt 260,114 | output 256 | cache 0 (0.0%) | TTFT 2m 26.4s | total 2m 30.0s | queue 21.3 ms | prefill 1.78k tok/s | decode 69.6 tok/s | mtp accepted 150/312 (48.1%)
-2026-09-07 17:06:46.438  INFO  server stopped
+2026-09-07 17:42:08.405  INFO  starting engine
+2026-09-07 17:42:08.508  INFO  loading weights | 16.9 GiB
+2026-09-07 17:42:11.022  INFO  weights ready | 16.9 GiB | 2.5s | 6.74 GiB/s
+2026-09-07 17:42:11.595  INFO  CUDA graphs ready | 325 ms
+2026-09-07 17:42:11.596  INFO  engine ready | qwen3.8-27b/groupwise-int | total 3.2s | weights 16.9 GiB
+2026-09-07 17:42:11.596  INFO  capacity | KV 262,144 tokens, e8, explicit | pages 4,096/4,096 | runtime 5.16 GiB | free 393.3 MiB
+2026-09-07 17:42:11.596  INFO  context cache | 1 active + 0 cached device states | host 0 states, 0 B KV | private 2 | shared 4 | anchors 2
+2026-09-07 17:42:11.596  INFO  media | 16 preprocess workers | cache 1.00 GiB | live 2.00 GiB
+2026-09-07 17:42:11.756  INFO  listening on http://127.0.0.1:35241 | model qwen3.8-27b | auth disabled
+2026-09-07 17:42:11.849  INFO  req#1 started | openai-chat stream | 2 messages | max output 256 | thinking off | preserve thinking
+2026-09-07 17:42:16.756  INFO  throughput | 5.0s | prefill 3.48k tok/s (17,408 tok) | running 1 (prefill 1) | host 23.1% (1.2s)
+2026-09-07 17:42:21.756  INFO  throughput | 5.0s | prefill 3.07k tok/s (15,360 tok) | running 1 (prefill 1) | host 22.3% (1.1s)
+2026-09-07 17:42:26.756  INFO  throughput | 5.0s | prefill 2.87k tok/s (14,336 tok) | running 1 (prefill 1) | host 22.7% (1.1s)
+2026-09-07 17:42:31.756  INFO  throughput | 5.0s | prefill 2.46k tok/s (12,288 tok) | running 1 (prefill 1) | host 20.8% (1.0s)
+2026-09-07 17:42:36.756  INFO  throughput | 5.0s | prefill 2.46k tok/s (12,288 tok) | running 1 (prefill 1) | host 22.2% (1.1s)
+2026-09-07 17:42:41.756  INFO  throughput | 5.0s | prefill 2.25k tok/s (11,264 tok) | running 1 (prefill 1) | host 21.5% (1.1s)
+2026-09-07 17:42:46.756  INFO  throughput | 5.0s | prefill 2.25k tok/s (11,264 tok) | running 1 (prefill 1) | host 22.6% (1.1s)
+2026-09-07 17:42:51.756  INFO  throughput | 5.0s | prefill 2.05k tok/s (10,240 tok) | running 1 (prefill 1) | host 21.6% (1.1s)
+2026-09-07 17:42:56.756  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 20.1% (1.0s)
+2026-09-07 17:43:01.756  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 20.9% (1.0s)
+2026-09-07 17:43:06.756  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 21.6% (1.1s)
+2026-09-07 17:43:11.756  INFO  throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1) | host 22.4% (1.1s)
+2026-09-07 17:43:16.756  INFO  throughput | 5.0s | prefill 1.64k tok/s (8,192 tok) | running 1 (prefill 1) | host 20.5% (1.0s)
+2026-09-07 17:43:21.756  INFO  throughput | 5.0s | prefill 1.64k tok/s (8,192 tok) | running 1 (prefill 1) | host 21.1% (1.1s)
+2026-09-07 17:43:26.756  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 18.9% (947 ms)
+2026-09-07 17:43:31.756  INFO  throughput | 5.0s | prefill 1.64k tok/s (8,192 tok) | running 1 (prefill 1) | host 22.2% (1.1s)
+2026-09-07 17:43:36.756  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 19.9% (995 ms)
+2026-09-07 17:43:41.756  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 20.3% (1.0s)
+2026-09-07 17:43:46.756  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 20.8% (1.0s)
+2026-09-07 17:43:51.756  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 21.2% (1.1s)
+2026-09-07 17:43:56.756  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 21.7% (1.1s)
+2026-09-07 17:44:01.756  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 18.9% (947 ms)
+2026-09-07 17:44:06.756  INFO  throughput | 5.0s | prefill 1.43k tok/s (7,168 tok) | running 1 (prefill 1) | host 22.5% (1.1s)
+2026-09-07 17:44:11.756  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 19.7% (983 ms)
+2026-09-07 17:44:16.756  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 20.0% (998 ms)
+2026-09-07 17:44:21.756  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 20.3% (1.0s)
+2026-09-07 17:44:26.756  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 20.6% (1.0s)
+2026-09-07 17:44:31.756  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 20.9% (1.0s)
+2026-09-07 17:44:36.756  INFO  throughput | 5.0s | prefill 1.23k tok/s (6,144 tok) | running 1 (prefill 1) | host 21.3% (1.1s)
+2026-09-07 17:44:41.601  INFO  req#1 done | openai-chat | output limit | prompt 260,114 | output 256 | cache 0 (0.0%) | TTFT 2m 26.2s | total 2m 29.8s | queue 21.3 ms | prefill 1.78k tok/s | decode 69.7 tok/s | mtp accepted 150/312 (48.1%)
+2026-09-07 17:44:41.602  INFO  server stopped

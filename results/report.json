@@ -1,13 +1,13 @@
 {
-  "started": "2026-09-07T21:04:12.796160+00:00",
+  "started": "2026-09-07T21:42:08.154749+00:00",
   "status": "complete",
   "gpu": "NVIDIA GeForce RTX 4090, 595.84, 350.00 W, 24564 MiB",
-  "workload_sha256": "54030eacc30a1548995ac6237bc05d1bafadd557dc84f4798752235394138101",
+  "workload_sha256": "be528d03b4cbebda5fb546a47222f5a3af1332f2a45a87b15ec3c5f3ed683742",
   "workload": {
     "name": "long-context-256k",
+    "source": "backends/ninfer/examples/cli/messages/long_niah_256k.json",
     "max_tokens": 256,
-    "expected_text": "ORCHID=493817; COLOR=COBALT",
-    "source": "backends/ninfer/examples/cli/messages/long_niah_256k.json"
+    "expected_text": "ORCHID=493817; COLOR=COBALT"
   },
   "measurement": {
     "warmup_requests": 0,
@@ -23,9 +23,9 @@
       "server_log": "logs/ninfer.log",
       "results": [
         {
-          "client_ttft_seconds": 146.36470939500032,
-          "client_tpot_seconds": 0.014361779223534042,
-          "client_total_seconds": 150.0269630970015,
+          "client_ttft_seconds": 146.18299301900151,
+          "client_tpot_seconds": 0.01435128513725181,
+          "client_total_seconds": 149.84257072900073,
           "usage": {
             "completion_tokens": 256,
             "completion_tokens_details": {
@@ -41,14 +41,14 @@
             "cache_n": 0,
             "draft_n": 312,
             "draft_n_accepted": 150,
-            "predicted_ms": 3662.209231,
+            "predicted_ms": 3659.5066300000003,
             "predicted_n": 256,
-            "predicted_per_second": 69.63010137199886,
-            "predicted_per_token_ms": 14.36160482745098,
-            "prompt_ms": 146253.887247,
+            "predicted_per_second": 69.6815242550879,
+            "predicted_per_token_ms": 14.351006392156863,
+            "prompt_ms": 146071.800824,
             "prompt_n": 260114,
-            "prompt_per_second": 1778.5099931101868,
-            "prompt_per_token_ms": 0.5622684178744705
+            "prompt_per_second": 1780.727002287101,
+            "prompt_per_token_ms": 0.5615683924125576
           },
           "text": "ORCHID=493817; COLOR=COBALT\n\nThe document is a collection of essays by Paul Graham, primarily focused on the nature of great hackers, the mechanics of startups, and the philosophy of work and intelligence. The central argument across these pieces is that success in technology and creative fields depends less on conventional metrics (like prestige or wealth) and more on specific, often counter-intuitive, qualities: extreme productivity variation, the use of powerful tools (specifically Lisp), the importance of \"nasty little problems\" versus interesting ones, and the divergence between wisdom and intelligence.\n\n**Development of the Argument:**\n\n1.  **Variation in Productivity (\"Great Hackers\"):**\n    *   Graham argues that in high-tech fields, particularly programming, the difference in productivity between the best and average individuals is not just a matter of degree but of kind. He cites Fred Brooks and his own experience with Viaweb to show that top programmers can be 10 to 100 times more productive than others.\n    *   This variation is magnified by technology. While stick-gathering has low variance, using a computer creates enormous leverage for those who understand it deeply.\n    *   Great hackers are motivated by",
           "reasoning": "",
@@ -66,9 +66,9 @@
       "server_log": "logs/llamacpp.log",
       "results": [
         {
-          "client_ttft_seconds": 220.2292208659983,
-          "client_tpot_seconds": 0.022669540811765213,
-          "client_total_seconds": 226.00995377299841,
+          "client_ttft_seconds": 219.92725121200056,
+          "client_tpot_seconds": 0.02265780973725401,
+          "client_total_seconds": 225.70499269500033,
           "usage": {
             "completion_tokens": 256,
             "prompt_tokens": 260114,
@@ -80,13 +80,13 @@
           "server_timings": {
             "cache_n": 0,
             "prompt_n": 260114,
-            "prompt_ms": 220003.426,
-            "prompt_per_token_ms": 0.8457961739852526,
-            "prompt_per_second": 1182.3179517213518,
+            "prompt_ms": 219700.7,
+            "prompt_per_token_ms": 0.8446323535065395,
+            "prompt_per_second": 1183.947069809063,
             "predicted_n": 256,
-            "predicted_ms": 5777.208,
-            "predicted_per_token_ms": 22.65571764705882,
-            "predicted_per_second": 44.1389681659376,
+            "predicted_ms": 5774.227,
+            "predicted_per_token_ms": 22.644027450980392,
+            "predicted_per_second": 44.1617553310599,
             "draft_n": 290,
             "draft_n_accepted": 178
           },
