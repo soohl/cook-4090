@@ -1,6 +1,5 @@
 **/.deps
 /models/
-/results/
 /build/
 __pycache__/
 *.py[cod]

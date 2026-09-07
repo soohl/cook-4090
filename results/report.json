@@ -1,0 +1,105 @@
+{
+  "started": "2026-09-07T21:04:12.796160+00:00",
+  "status": "complete",
+  "gpu": "NVIDIA GeForce RTX 4090, 595.84, 350.00 W, 24564 MiB",
+  "workload_sha256": "54030eacc30a1548995ac6237bc05d1bafadd557dc84f4798752235394138101",
+  "workload": {
+    "name": "long-context-256k",
+    "max_tokens": 256,
+    "expected_text": "ORCHID=493817; COLOR=COBALT",
+    "source": "backends/ninfer/examples/cli/messages/long_niah_256k.json"
+  },
+  "measurement": {
+    "warmup_requests": 0,
+    "measured_repeats": 1,
+    "temperature": 0,
+    "seed": 42,
+    "prompt_cache": false
+  },
+  "runs": [
+    {
+      "backend": "ninfer",
+      "server_version": null,
+      "server_log": "logs/ninfer.log",
+      "results": [
+        {
+          "client_ttft_seconds": 146.36470939500032,
+          "client_tpot_seconds": 0.014361779223534042,
+          "client_total_seconds": 150.0269630970015,
+          "usage": {
+            "completion_tokens": 256,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 260114,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 260370
+          },
+          "server_timings": {
+            "cache_n": 0,
+            "draft_n": 312,
+            "draft_n_accepted": 150,
+            "predicted_ms": 3662.209231,
+            "predicted_n": 256,
+            "predicted_per_second": 69.63010137199886,
+            "predicted_per_token_ms": 14.36160482745098,
+            "prompt_ms": 146253.887247,
+            "prompt_n": 260114,
+            "prompt_per_second": 1778.5099931101868,
+            "prompt_per_token_ms": 0.5622684178744705
+          },
+          "text": "ORCHID=493817; COLOR=COBALT\n\nThe document is a collection of essays by Paul Graham, primarily focused on the nature of great hackers, the mechanics of startups, and the philosophy of work and intelligence. The central argument across these pieces is that success in technology and creative fields depends less on conventional metrics (like prestige or wealth) and more on specific, often counter-intuitive, qualities: extreme productivity variation, the use of powerful tools (specifically Lisp), the importance of \"nasty little problems\" versus interesting ones, and the divergence between wisdom and intelligence.\n\n**Development of the Argument:**\n\n1.  **Variation in Productivity (\"Great Hackers\"):**\n    *   Graham argues that in high-tech fields, particularly programming, the difference in productivity between the best and average individuals is not just a matter of degree but of kind. He cites Fred Brooks and his own experience with Viaweb to show that top programmers can be 10 to 100 times more productive than others.\n    *   This variation is magnified by technology. While stick-gathering has low variance, using a computer creates enormous leverage for those who understand it deeply.\n    *   Great hackers are motivated by",
+          "reasoning": "",
+          "finish_reason": "length",
+          "repeat": 1,
+          "expected_text_found": true,
+          "reached_token_limit": true
+        }
+      ],
+      "quality_pass": true
+    },
+    {
+      "backend": "llamacpp",
+      "server_version": "",
+      "server_log": "logs/llamacpp.log",
+      "results": [
+        {
+          "client_ttft_seconds": 220.2292208659983,
+          "client_tpot_seconds": 0.022669540811765213,
+          "client_total_seconds": 226.00995377299841,
+          "usage": {
+            "completion_tokens": 256,
+            "prompt_tokens": 260114,
+            "total_tokens": 260370,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "server_timings": {
+            "cache_n": 0,
+            "prompt_n": 260114,
+            "prompt_ms": 220003.426,
+            "prompt_per_token_ms": 0.8457961739852526,
+            "prompt_per_second": 1182.3179517213518,
+            "predicted_n": 256,
+            "predicted_ms": 5777.208,
+            "predicted_per_token_ms": 22.65571764705882,
+            "predicted_per_second": 44.1389681659376,
+            "draft_n": 290,
+            "draft_n_accepted": 178
+          },
+          "text": "ORCHID=493817; COLOR=COBALT\n\nThe document provided is a compilation of several essays by Paul Graham, primarily focusing on the nature of programming, startups, and intellectual work. While the text contains a specific line stating \"OFFICIAL RECORD: The recovery code for the ORCHID relay is 493817, and its registered status color is COBALT,\" the rest of the document does not contain a single unified central argument but rather a collection of distinct arguments across multiple essays. However, several recurring themes and central arguments can be identified across the included texts:\n\n1.  **The Power of Lisp and the \"Blub Paradox\" (from \"Beating the Averages\"):**\n    *   **Argument:** Lisp is the most powerful programming language available, and using it provides a significant competitive advantage in startups.\n    *   **Development:** The author argues that programming languages vary in power, not just in convenience. He introduces the \"Blub Paradox,\" where programmers using a mid-level language (Blub) cannot perceive the advantages of more powerful languages because their perception is limited by their current tool. He uses his experience with Viaweb (later Yahoo Store) to demonstrate that writing",
+          "reasoning": "",
+          "finish_reason": "length",
+          "repeat": 1,
+          "expected_text_found": true,
+          "reached_token_limit": true
+        }
+      ],
+      "quality_pass": true
+    }
+  ],
+  "quality_pass": true
+}
