@@ -48,8 +48,9 @@ llama.cpp uses Q4_0 KV/MTP4.
 ```
 
 The same near-256K request runs through both engines with prompt caching
-disabled. The report includes retrieval, TTFT, TPOT, latency, throughput,
-tokens, MTP acceptance, versions, and GPU.
+disabled. A quality pass requires the exact answer
+`ORCHID=493817; COLOR=COBALT`. The report also includes TTFT, TPOT, latency,
+throughput, tokens, MTP acceptance, versions, and GPU.
 
 Each run replaces:
 

@@ -1,12 +1,12 @@
 {
-  "started": "2026-09-07T21:42:08.154749+00:00",
+  "started": "2026-09-07T21:56:58.404509+00:00",
   "status": "complete",
   "gpu": "NVIDIA GeForce RTX 4090, 595.84, 350.00 W, 24564 MiB",
-  "workload_sha256": "be528d03b4cbebda5fb546a47222f5a3af1332f2a45a87b15ec3c5f3ed683742",
+  "workload_sha256": "824a10fc955a3ae2bef941cf0b684da756928c7960fd3124020315e0b6fc5ca4",
   "workload": {
     "name": "long-context-256k",
     "source": "backends/ninfer/examples/cli/messages/long_niah_256k.json",
-    "max_tokens": 256,
+    "max_tokens": 32,
     "expected_text": "ORCHID=493817; COLOR=COBALT"
   },
   "measurement": {
@@ -23,39 +23,39 @@
       "server_log": "logs/ninfer.log",
       "results": [
         {
-          "client_ttft_seconds": 146.18299301900151,
-          "client_tpot_seconds": 0.01435128513725181,
-          "client_total_seconds": 149.84257072900073,
+          "client_ttft_seconds": 145.97037922399977,
+          "client_tpot_seconds": 0.008583584999996674,
+          "client_total_seconds": 146.10771658399972,
           "usage": {
-            "completion_tokens": 256,
+            "completion_tokens": 17,
             "completion_tokens_details": {
               "reasoning_tokens": 0
             },
-            "prompt_tokens": 260114,
+            "prompt_tokens": 260091,
             "prompt_tokens_details": {
               "cached_tokens": 0
             },
-            "total_tokens": 260370
+            "total_tokens": 260108
           },
           "server_timings": {
             "cache_n": 0,
-            "draft_n": 312,
-            "draft_n_accepted": 150,
-            "predicted_ms": 3659.5066300000003,
-            "predicted_n": 256,
-            "predicted_per_second": 69.6815242550879,
-            "predicted_per_token_ms": 14.351006392156863,
-            "prompt_ms": 146071.800824,
-            "prompt_n": 260114,
-            "prompt_per_second": 1780.727002287101,
-            "prompt_per_token_ms": 0.5615683924125576
+            "draft_n": 12,
+            "draft_n_accepted": 12,
+            "predicted_ms": 137.25675,
+            "predicted_n": 17,
+            "predicted_per_second": 116.56985904154075,
+            "predicted_per_token_ms": 8.578546875,
+            "prompt_ms": 145859.197579,
+            "prompt_n": 260091,
+            "prompt_per_second": 1783.1648899558081,
+            "prompt_per_token_ms": 0.5608006335436443
           },
-          "text": "ORCHID=493817; COLOR=COBALT\n\nThe document is a collection of essays by Paul Graham, primarily focused on the nature of great hackers, the mechanics of startups, and the philosophy of work and intelligence. The central argument across these pieces is that success in technology and creative fields depends less on conventional metrics (like prestige or wealth) and more on specific, often counter-intuitive, qualities: extreme productivity variation, the use of powerful tools (specifically Lisp), the importance of \"nasty little problems\" versus interesting ones, and the divergence between wisdom and intelligence.\n\n**Development of the Argument:**\n\n1.  **Variation in Productivity (\"Great Hackers\"):**\n    *   Graham argues that in high-tech fields, particularly programming, the difference in productivity between the best and average individuals is not just a matter of degree but of kind. He cites Fred Brooks and his own experience with Viaweb to show that top programmers can be 10 to 100 times more productive than others.\n    *   This variation is magnified by technology. While stick-gathering has low variance, using a computer creates enormous leverage for those who understand it deeply.\n    *   Great hackers are motivated by",
+          "text": "ORCHID=493817; COLOR=COBALT",
           "reasoning": "",
-          "finish_reason": "length",
+          "finish_reason": "stop",
           "repeat": 1,
-          "expected_text_found": true,
-          "reached_token_limit": true
+          "exact_answer": true,
+          "reached_token_limit": false
         }
       ],
       "quality_pass": true
@@ -66,36 +66,36 @@
       "server_log": "logs/llamacpp.log",
       "results": [
         {
-          "client_ttft_seconds": 219.92725121200056,
-          "client_tpot_seconds": 0.02265780973725401,
-          "client_total_seconds": 225.70499269500033,
+          "client_ttft_seconds": 220.47172266099915,
+          "client_tpot_seconds": 0.020344305187563805,
+          "client_total_seconds": 220.79723154400017,
           "usage": {
-            "completion_tokens": 256,
-            "prompt_tokens": 260114,
-            "total_tokens": 260370,
+            "completion_tokens": 17,
+            "prompt_tokens": 260091,
+            "total_tokens": 260108,
             "prompt_tokens_details": {
               "cached_tokens": 0
             }
           },
           "server_timings": {
             "cache_n": 0,
-            "prompt_n": 260114,
-            "prompt_ms": 219700.7,
-            "prompt_per_token_ms": 0.8446323535065395,
-            "prompt_per_second": 1183.947069809063,
-            "predicted_n": 256,
-            "predicted_ms": 5774.227,
-            "predicted_per_token_ms": 22.644027450980392,
-            "predicted_per_second": 44.1617553310599,
-            "draft_n": 290,
-            "draft_n_accepted": 178
+            "prompt_n": 260091,
+            "prompt_ms": 220245.191,
+            "prompt_per_token_ms": 0.8468005082836392,
+            "prompt_per_second": 1180.9156822861119,
+            "predicted_n": 17,
+            "predicted_ms": 321.926,
+            "predicted_per_token_ms": 20.120375,
+            "predicted_per_second": 49.70086293123264,
+            "draft_n": 16,
+            "draft_n_accepted": 16
           },
-          "text": "ORCHID=493817; COLOR=COBALT\n\nThe document provided is a compilation of several essays by Paul Graham, primarily focusing on the nature of programming, startups, and intellectual work. While the text contains a specific line stating \"OFFICIAL RECORD: The recovery code for the ORCHID relay is 493817, and its registered status color is COBALT,\" the rest of the document does not contain a single unified central argument but rather a collection of distinct arguments across multiple essays. However, several recurring themes and central arguments can be identified across the included texts:\n\n1.  **The Power of Lisp and the \"Blub Paradox\" (from \"Beating the Averages\"):**\n    *   **Argument:** Lisp is the most powerful programming language available, and using it provides a significant competitive advantage in startups.\n    *   **Development:** The author argues that programming languages vary in power, not just in convenience. He introduces the \"Blub Paradox,\" where programmers using a mid-level language (Blub) cannot perceive the advantages of more powerful languages because their perception is limited by their current tool. He uses his experience with Viaweb (later Yahoo Store) to demonstrate that writing",
+          "text": "ORCHID=493817; COLOR=COBALT",
           "reasoning": "",
-          "finish_reason": "length",
+          "finish_reason": "stop",
           "repeat": 1,
-          "expected_text_found": true,
-          "reached_token_limit": true
+          "exact_answer": true,
+          "reached_token_limit": false
         }
       ],
       "quality_pass": true

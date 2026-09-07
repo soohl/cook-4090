@@ -26,14 +26,12 @@ def default_workload(max_tokens=None):
         raise RuntimeError(f"Question missing from {source}")
     messages[-1]["content"] = content[:question] + (
         "What are the ORCHID relay recovery code and registered status color? "
-        "Begin with ORCHID=<code>; COLOR=<color>, using the facts in the document. "
-        "Then explain the document's central argument and how it develops. "
-        "Use the full response budget."
+        "Respond with exactly: ORCHID=<code>; COLOR=<color>"
     )
     return {
         "name": "long-context-256k",
         "source": str(source.relative_to(ROOT)),
-        "max_tokens": max_tokens or int(os.environ.get("BENCHMARK_TOKENS", "256")),
+        "max_tokens": max_tokens or int(os.environ.get("BENCHMARK_TOKENS", "32")),
         "expected_text": "ORCHID=493817; COLOR=COBALT",
         "messages": messages,
     }
@@ -250,8 +248,8 @@ def main():
                         for repeat in range(1, repeats + 1):
                             result = request(url, payload, timeout)
                             result["repeat"] = repeat
-                            result["expected_text_found"] = (
-                                workload["expected_text"].lower() in result["text"].lower()
+                            result["exact_answer"] = (
+                                workload["expected_text"] == result["text"].strip()
                             )
                             result["reached_token_limit"] = (
                                 result["usage"]["completion_tokens"] == workload["max_tokens"]
@@ -265,7 +263,7 @@ def main():
                 sanitize_log(log_path, server_argv)
 
             run["quality_pass"] = all(
-                result["expected_text_found"] for result in run["results"]
+                result["exact_answer"] for result in run["results"]
             )
             save()
 
