@@ -1,10 +1,12 @@
 **/.deps
 /models/
 /build/
+/.venv-vision/
+/backends/q27/
+/results/
 __pycache__/
 *.py[cod]
 *.gguf
 *.ninfer
 *.safetensors
 *.log
-!/results/logs/*.log

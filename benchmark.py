@@ -145,14 +145,13 @@ def sanitize_log(path, command):
 
 
 def main():
-    out = ROOT / "results"
-    if out.exists():
-        import shutil
-        shutil.rmtree(out)
-    out.mkdir()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    out = ROOT / "results" / "benchmark" / stamp
+    out.mkdir(parents=True)
     logs = out / "logs"
     logs.mkdir()
     report_path = out / "report.json"
+    print(f"Results: {report_path.relative_to(ROOT)}", flush=True)
 
     workload = default_workload()
     warmup = int(os.environ.get("BENCHMARK_WARMUP", "0"))
