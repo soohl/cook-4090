@@ -7,7 +7,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 MODEL_ID=${MODEL_ID:-qwen3.8-27b}
 HOST=${HOST:-127.0.0.1}
 PORT=${PORT:-8080}
-CONTEXT=${CONTEXT:-$([[ "${2:-}" == llamacpp ]] && echo 32768 || echo 262144)}
+CONTEXT=${CONTEXT:-$([[ "${2:-}" == llamacpp || "${2:-}" == exl3 ]] && echo 32768 || echo 262144)}
 MTP=${MTP:-inline} # on: external llama.cpp draft; inline: fused GGUF; off: disabled
 VISION=${VISION:-on}
 
@@ -67,6 +67,31 @@ CROSS_TOKENS=${CROSS_TOKENS:-1024}
 CROSS_WARMUP_TOKENS=${CROSS_WARMUP_TOKENS:-32}
 CROSS_MTP_DRAFT=${CROSS_MTP_DRAFT:-3}
 CROSS_TIMEOUT=${CROSS_TIMEOUT:-600}
+CROSS_THINKING=${CROSS_THINKING:-off}
+CROSS_QUALITY_TOKENS=${CROSS_QUALITY_TOKENS:-128}
+# Optional MiaAI EXL3 deployment comparison; all downloaded artifacts are ignored.
+EXL3_SOURCE=${EXL3_SOURCE:-"$ROOT/backends/exllamav3"}
+EXL3_KIT=${EXL3_KIT:-"$ROOT/backends/mia-exl3"}
+EXL3_REVISION=${EXL3_REVISION:-63b32f001d7b2cfed3b3e3aaf25f534ba53cc7ed}
+EXL3_KIT_REVISION=${EXL3_KIT_REVISION:-1242187390f780dba907e30659f1639fd0b491c8}
+EXL3_ENV=${EXL3_ENV:-"$ROOT/build/exllamav3-venv"}
+EXL3_BUILD=${EXL3_BUILD:-"$ROOT/build/exllamav3-sm89"}
+EXL3_CACHE=${EXL3_CACHE:-"$ROOT/build/exllamav3-cache"}
+EXL3_WEIGHTS=${EXL3_WEIGHTS:-"$ROOT/models/comparison/mia-exl3/Qwen3.8-27B-EXL3-3.5bpw"}
+EXL3_DRAFT_WEIGHTS=${EXL3_DRAFT_WEIGHTS:-"$ROOT/models/comparison/mia-exl3/Qwen3.8-27B-DFlash2-EXL3-5.0bpw"}
+EXL3_WEIGHTS_REVISION=${EXL3_WEIGHTS_REVISION:-19441ac874c4018295da848e250f23511361cda4}
+EXL3_DRAFT_REVISION=${EXL3_DRAFT_REVISION:-4f0436269bca761b071f05319e8e04a87cc633f9}
+EXL3_KV=${EXL3_KV:-nvfp4}
+# Pinned upstream server defaults: MTP4, DFlash2 K7, 2,048-token prefill chunks,
+# xhigh thinking, one active request, automatic compatible-prefix reuse.
+# It does not expose these settings as CLI flags; this comparison preserves them.
+EXL3_SPEC=${EXL3_SPEC:-mtp}
+EXL3_CONTEXT=${EXL3_CONTEXT:-32768}
+EXL3_GPU_GB=${EXL3_GPU_GB:-22}
+EXL3_BUILD_JOBS=${EXL3_BUILD_JOBS:-4}
+EXL3_TORCH=${EXL3_TORCH:-2.8.0+cu128}
+EXL3_TORCH_INDEX=${EXL3_TORCH_INDEX:-https://download.pytorch.org/whl/cu128}
+EXL3_COMPARE_QUALITY_TOKENS=${EXL3_COMPARE_QUALITY_TOKENS:-8192}
 QUALITY_PROFILES=${QUALITY_PROFILES:-bf16:32768,int8:32768,e8:32768,bf16:65536,e8:65536,int8:131072,e8:131072,e8:262144}
 QUALITY_OUTPUT=${QUALITY_OUTPUT:-8192}
 QUALITY_SEED=${QUALITY_SEED:-42}
@@ -123,6 +148,23 @@ serve() {
     esac
 
     case "$backend" in
+        exl3)
+            [[ "$VISION" == off ]] || fail "EXL3 comparison is text-only; set VISION=off."
+            export CUDA_HOME="$CUDA_ROOT" TORCH_CUDA_ARCH_LIST=8.9 MAX_JOBS="$EXL3_BUILD_JOBS"
+            export TORCH_EXTENSIONS_DIR="$EXL3_CACHE/torch_extensions" TRITON_CACHE_DIR="$EXL3_CACHE/triton"
+            export PATH="$EXL3_ENV/bin:$PATH"
+            command=("$EXL3_ENV/bin/python" -u "$EXL3_KIT/tools/serve_openai.py"
+                --model "$EXL3_WEIGHTS" --host "$HOST" --port "$PORT"
+                --cache_size "$CONTEXT" --grid_size "$EXL3_GPU_GB" --cache_quant "$EXL3_KV")
+            files=("$EXL3_ENV/bin/python" "$EXL3_KIT/tools/serve_openai.py" "$EXL3_WEIGHTS/config.json")
+            case "$EXL3_SPEC" in
+                mtp|none) command+=(--draft_model "$EXL3_SPEC") ;;
+                dflash2)
+                    command+=(--draft_model "$EXL3_DRAFT_WEIGHTS")
+                    files+=("$EXL3_DRAFT_WEIGHTS/config.json") ;;
+                *) fail "EXL3_SPEC must be mtp, dflash2, or none." ;;
+            esac
+            ;;
         ninfer)
             command=(
                 "$NINFER_SERVER" "$NINFER_WEIGHTS"
@@ -202,7 +244,7 @@ serve() {
                 --enable-metrics)
             files=("$Q27_SERVER" "$Q27_WEIGHTS" "$Q27_TOKENIZER")
             ;;
-        *) fail "Choose ninfer, llamacpp, or q27." ;;
+        *) fail "Choose ninfer, llamacpp, q27, or exl3." ;;
     esac
 
     command+=("$@")
@@ -218,6 +260,34 @@ setup() {
     local backend=${1:-}
     shift || true
     local -a configure build
+
+    if [[ "$backend" == exl3 ]]; then
+        need uv
+        [[ "${DRY_RUN:-0}" != 1 ]] || fail "EXL3 setup does not support DRY_RUN; review its commands in run.sh."
+        [[ -d "$EXL3_SOURCE/.git" && -d "$EXL3_KIT/.git" ]] || fail "Missing EXL3 checkouts; see README.md."
+        [[ $(git -C "$EXL3_SOURCE" rev-parse HEAD) == "$EXL3_REVISION" ]] || fail "EXL3 engine revision mismatch."
+        [[ $(git -C "$EXL3_KIT" rev-parse HEAD) == "$EXL3_KIT_REVISION" ]] || fail "EXL3 kit revision mismatch."
+        if git -C "$EXL3_KIT" apply --check "$ROOT/patches/mia-exl3-benchmark-metrics.patch" 2>/dev/null; then
+            git -C "$EXL3_KIT" apply "$ROOT/patches/mia-exl3-benchmark-metrics.patch"
+        else
+            git -C "$EXL3_KIT" apply --reverse --check "$ROOT/patches/mia-exl3-benchmark-metrics.patch" || fail "EXL3 metrics patch does not match checkout."
+        fi
+        [[ -x "$EXL3_ENV/bin/python" ]] || uv venv --python 3.11 "$EXL3_ENV"
+        uv pip install --python "$EXL3_ENV/bin/python" "torch==$EXL3_TORCH" --index-url "$EXL3_TORCH_INDEX"
+        mkdir -p "$EXL3_CACHE"
+        printf 'torch==%s\n' "$EXL3_TORCH" > "$EXL3_CACHE/torch-constraint.txt"
+        uv pip install --python "$EXL3_ENV/bin/python" -c "$EXL3_CACHE/torch-constraint.txt" \
+            -r "$ROOT/requirements-exl3.txt"
+        mkdir -p "$EXL3_BUILD"
+        if [[ ! -e "$EXL3_SOURCE/build" && ! -L "$EXL3_SOURCE/build" ]]; then
+            ln -s "$(realpath --relative-to="$EXL3_SOURCE" "$EXL3_BUILD")" "$EXL3_SOURCE/build"
+        fi
+        export CUDA_HOME="$CUDA_ROOT" TORCH_CUDA_ARCH_LIST=8.9 MAX_JOBS="$EXL3_BUILD_JOBS"
+        export PATH="$EXL3_ENV/bin:$PATH"
+        uv pip install --python "$EXL3_ENV/bin/python" --no-build-isolation --no-deps "$EXL3_SOURCE"
+        uv pip freeze --python "$EXL3_ENV/bin/python" > "$EXL3_CACHE/requirements-resolved.txt"
+        return
+    fi
 
     case "$backend" in
         ninfer)
@@ -288,6 +358,10 @@ Usage:
   ./run.sh serve {ninfer|llamacpp}
   ./run.sh benchmark
   ./run.sh compare [--modes ninfer-mtp ninfer-dflash5 llamacpp q27] [--vision]
+  ./run.sh setup exl3 # existing pinned checkouts; isolated environment and reporting patch
+  ./run.sh exl3-download # pinned target and DFlash2 weights
+  CONTEXT=32768 VISION=off ./run.sh serve exl3
+  ./run.sh compare-exl3 # four profiles; thinking enabled, generous quality output budget
 
 MTP=on uses an external llama.cpp draft; MTP=inline uses the GGUF's MTP head.
 NInfer embeds MTP in its artifact for both on and inline. MTP=off disables MTP.
@@ -307,6 +381,12 @@ action=${1:-}
 shift || true
 case "$action" in
     setup) setup "$@" ;;
+    exl3-download)
+        [[ -x "$EXL3_ENV/bin/hf" ]] || fail "Run ./run.sh setup exl3 first."
+        export HF_HOME="$EXL3_CACHE/huggingface"
+        "$EXL3_ENV/bin/hf" download Mia-AiLab/Qwen3.8-27B-EXL3-3.5bpw --revision "$EXL3_WEIGHTS_REVISION" --local-dir "$EXL3_WEIGHTS"
+        exec "$EXL3_ENV/bin/hf" download Mia-AiLab/Qwen3.8-27B-DFlash2-EXL3-5.0bpw --revision "$EXL3_DRAFT_REVISION" --local-dir "$EXL3_DRAFT_WEIGHTS"
+        ;;
     serve) serve "$@" ;;
     benchmark)
         need uv
@@ -354,10 +434,18 @@ case "$action" in
         export KV_CONTEXT_SPEC KV_CONTEXT_DRAFT KV_CONTEXT_CHUNK KV_CONTEXT_VISION_TOKENS
         exec "$VISION_PYTHON" "$ROOT/kv_context_benchmark.py"
         ;;
-    compare)
+    compare|compare-exl3)
         need uv
+        if [[ "$action" == compare-exl3 ]]; then
+            CROSS_CONTEXT="$EXL3_CONTEXT"
+            CROSS_THINKING=on
+            CROSS_QUALITY_TOKENS="$EXL3_COMPARE_QUALITY_TOKENS"
+            set -- --modes ninfer-mtp ninfer-dflash5 exl3-mtp exl3-dflash2 "$@"
+        fi
         export CROSS_CONTEXT CROSS_REPEATS CROSS_TOKENS CROSS_WARMUP_TOKENS CROSS_TIMEOUT
-        export CROSS_MTP_DRAFT
+        export CROSS_MTP_DRAFT CROSS_THINKING CROSS_QUALITY_TOKENS
+        export EXL3_SOURCE EXL3_KIT EXL3_ENV EXL3_CACHE EXL3_WEIGHTS EXL3_DRAFT_WEIGHTS
+        export EXL3_KV EXL3_GPU_GB EXL3_WEIGHTS_REVISION EXL3_DRAFT_REVISION
         export CROSS_LLAMA_BUILD CROSS_GGUF CROSS_MMPROJ
         export Q27_SOURCE Q27_SERVER Q27_WEIGHTS Q27_TOKENIZER
         exec uv run --no-project --python 3.11 python "$ROOT/cross_benchmark.py" "$@"

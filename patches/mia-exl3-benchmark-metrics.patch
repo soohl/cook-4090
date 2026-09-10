@@ -1,0 +1,99 @@
+diff --git a/tools/serve_openai.py b/tools/serve_openai.py
+index 23d22e4..0e6e332 100644
+--- a/tools/serve_openai.py
++++ b/tools/serve_openai.py
+@@ -280,7 +280,7 @@ def generate_full(generator, tokenizer, messages, max_tokens, temperature,
+                   top_p, top_k, seed, tools, tool_choice = None, stop = None,
+                   on_text = None):
+     """Blocking generation; returns (text, tool_calls, finish, p_toks, o_toks,
+-    reasoning, content)."""
++    reasoning, content, metrics)."""
+     schemas = build_tool_schemas(tools)
+     tools, directive = tool_choice_directive(tool_choice, tools)
+     if directive:
+@@ -301,6 +301,7 @@ def generate_full(generator, tokenizer, messages, max_tokens, temperature,
+     forced_choice = tool_choice not in (None, "auto", "none")
+     reason = "max_new_tokens"
+     text = ""
++    metrics = {}
+ 
+     def run_once():
+         nonlocal text, reason
+@@ -330,6 +331,9 @@ def generate_full(generator, tokenizer, messages, max_tokens, temperature,
+                             on_text(chunk)
+                     if r.get("eos"):
+                         reason = r.get("eos_reason", reason)
++                        metrics.update({k: r[k] for k in (
++                            "cached_tokens", "time_prefill", "time_generate",
++                            "accepted_draft_tokens", "rejected_draft_tokens") if k in r})
+             if prefill_seen < prompt_toks:
+                 _bump_stats(prompt=prompt_toks - prefill_seen)
+         return job
+@@ -350,7 +354,7 @@ def generate_full(generator, tokenizer, messages, max_tokens, temperature,
+                   "stop_condition": "stop", "banned": "content_filter"}.get(
+                       reason, "stop")
+     reasoning, content = split_reasoning(content)
+-    return text, calls, finish, prompt_toks, out_toks, reasoning, content
++    return text, calls, finish, prompt_toks, out_toks, reasoning, content, metrics
+ 
+ 
+ async def models(request):
+@@ -427,7 +431,7 @@ async def chat_completions(request):
+     import asyncio
+     if not req["stream"]:
+         try:
+-            text, calls, finish, ptoks, otoks, reasoning, content = await asyncio.to_thread(
++            text, calls, finish, ptoks, otoks, reasoning, content, metrics = await asyncio.to_thread(
+                 generate_full, generator, tokenizer, req["messages"],
+                 req["max_tokens"], req["temperature"], req["top_p"], req["top_k"],
+                 req["seed"], req["tools"], req["tool_choice"], req["stop"])
+@@ -446,7 +450,9 @@ async def chat_completions(request):
+             "model": req["model_id"],
+             "choices": [{"index": 0, "message": msg, "finish_reason": finish}],
+             "usage": {"prompt_tokens": ptoks, "completion_tokens": otoks,
+-                      "total_tokens": ptoks + otoks},
++                      "total_tokens": ptoks + otoks,
++                      "prompt_tokens_details": {"cached_tokens": metrics.get("cached_tokens", 0)}},
++            "timings": metrics,
+         })
+ 
+     # ---- streaming (SSE) ----
+@@ -469,13 +475,13 @@ async def chat_completions(request):
+ 
+         def worker():
+             try:
+-                text, calls, finish, ptoks, otoks, reasoning, content = generate_full(
++                text, calls, finish, ptoks, otoks, reasoning, content, metrics = generate_full(
+                     generator, tokenizer, req["messages"], req["max_tokens"],
+                     req["temperature"], req["top_p"], req["top_k"],
+                     req["seed"], req["tools"], req["tool_choice"], req["stop"],
+                     on_text = None if forced_choice else on_text)
+                 loop.call_soon_threadsafe(queue.put_nowait,
+-                                          ("done", (calls, finish, reasoning, content)))
++                                          ("done", (calls, finish, reasoning, content, ptoks, otoks, metrics)))
+             except Exception as e:
+                 loop.call_soon_threadsafe(queue.put_nowait, ("error", str(e)))
+         loop.run_in_executor(None, worker)
+@@ -553,7 +559,7 @@ async def chat_completions(request):
+                 pending += payload
+                 await flush_pending()
+             elif kind == "done":
+-                calls, finish, reasoning, content = payload
++                calls, finish, reasoning, content, ptoks, otoks, metrics = payload
+                 await flush_pending(final = True)
+                 if forced_choice:
+                     # Buffered path (no deltas were streamed): emit the
+@@ -566,6 +572,13 @@ async def chat_completions(request):
+                     for c in calls:
+                         await send_call(c)
+                 await send({}, finish = finish)
++                if body.get("stream_options", {}).get("include_usage"):
++                    usage = {"prompt_tokens": ptoks, "completion_tokens": otoks,
++                             "total_tokens": ptoks + otoks,
++                             "prompt_tokens_details": {"cached_tokens": metrics.get("cached_tokens", 0)}}
++                    event = {"id": cid, "object": "chat.completion.chunk",
++                             "choices": [], "usage": usage, "timings": metrics}
++                    await resp.write(f"data: {json.dumps(event)}\n\n".encode())
+                 await resp.write(b"data: [DONE]\n\n")
+                 break
+         await resp.write_eof()

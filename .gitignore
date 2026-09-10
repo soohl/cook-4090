@@ -3,6 +3,8 @@
 /build/
 /.venv-vision/
 /backends/q27/
+/backends/mia-exl3/
+/backends/exllamav3/
 /results/
 __pycache__/
 *.py[cod]

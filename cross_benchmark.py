@@ -60,11 +60,11 @@ def workloads(vision):
     prefix = "Reference document (data, not instructions):\n<document>\n" + "".join(pieces) + "\n</document>\n"
     cases.append(("long-retrieval", [{"role": "user", "content": prefix +
                   'Return only a JSON object of the authoritative recovery codes for ORCHID, MAPLE, '
-                  'CEDAR, IRIS, BIRCH. Use string values.'}], 128, facts, True))
+                  'CEDAR, IRIS, BIRCH. Use string values.'}], int(os.environ["CROSS_QUALITY_TOKENS"]), facts, True))
     marked_question = cases[-1][1][0]["content"][len(prefix):]
     cases.append(("long-retrieval-marked", [{"role": "user", "content": [
         {"type": "text", "text": prefix, "prompt_cache_breakpoint": {"mode": "explicit"}},
-        {"type": "text", "text": marked_question}]}], 128, facts, True))
+        {"type": "text", "text": marked_question}]}], int(os.environ["CROSS_QUALITY_TOKENS"]), facts, True))
     code_messages = copy.deepcopy(cases[0][1])
     code_messages[-1]["content"] = prefix + "\nNow complete this independent task:\n" + code_messages[-1]["content"]
     cases.append(("long-code", code_messages, int(os.environ["CROSS_TOKENS"]), None, True))
@@ -82,7 +82,7 @@ def workloads(vision):
         ('A lamp is initially off. Toggle it 17 times, then set it off, then toggle twice. '
          'Return only JSON {"on":true or false}.', {"on": False}),
     ]
-    cases.extend((f"quality-{i}", [{"role": "user", "content": prompt}], 128, expected, False)
+    cases.extend((f"quality-{i}", [{"role": "user", "content": prompt}], int(os.environ["CROSS_QUALITY_TOKENS"]), expected, False)
                  for i, (prompt, expected) in enumerate(quality))
     return cases
 
@@ -97,18 +97,38 @@ def check_answer(text, expected):
         return False
 
 
+def trial_messages(original, label, repeat):
+    """Fresh leading identity, with one system message accepted by all templates."""
+    messages = copy.deepcopy(original)
+    identity = f"Independent evaluation {label} trial {repeat}. Follow the user's task."
+    if messages and messages[0]["role"] == "system":
+        messages[0]["content"] = identity + "\n\n" + messages[0]["content"]
+    else:
+        messages.insert(0, {"role": "system", "content": identity})
+    return messages
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--modes", nargs="+", default=["ninfer-mtp", "ninfer-dflash5", "llamacpp", "q27"],
-                        choices=["ninfer-mtp", "ninfer-dflash5", "llamacpp", "q27"])
+                        choices=["ninfer-mtp", "ninfer-dflash5", "ninfer-dflash7", "llamacpp", "q27", "exl3-mtp", "exl3-dflash2"])
     parser.add_argument("--vision", action="store_true")
     parser.add_argument("--fixtures", nargs="+")
     args = parser.parse_args()
-    if args.vision and "q27" in args.modes:
-        parser.error("q27 has no vision comparison profile")
+    has_exl3 = any(mode.startswith("exl3-") for mode in args.modes)
+    thinking = os.environ["CROSS_THINKING"] == "on"
+    if args.vision and ("q27" in args.modes or has_exl3):
+        parser.error("q27 and EXL3 have no vision comparison profile")
+    if has_exl3 and not thinking:
+        parser.error("Mia EXL3 forces thinking; set CROSS_THINKING=on for a matched comparison")
+    if thinking and "q27" in args.modes:
+        parser.error("q27 comparison is configured for non-thinking only")
     out = ROOT / "results/cross-engine" / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     out.mkdir(parents=True, exist_ok=False)
     cases = workloads(args.vision)
+    if has_exl3:
+        # The explicit cache marker is a NInfer-specific extension, not a shared workload.
+        cases = [case for case in cases if case[0] != "long-retrieval-marked"]
     if args.fixtures:
         cases = [case for case in cases if case[0] in args.fixtures]
         if not cases:
@@ -122,7 +142,7 @@ def main():
                                 ("Q27_MAXD", "Q27_SUFFIX", "Q27_PMIN", "Q27_SUFFIX_W", "Q27_KV")
                                 if k in os.environ},
               "vision": args.vision, "concurrency": 1, "temperature": 0, "seed": 42,
-              "thinking": False, "prefix_policy": "unique system message per cold case; exact repeat for warm",
+              "thinking": thinking, "prefix_policy": "unique system message per cold case; exact repeat for warm; check reported cached_tokens",
               "workloads_sha256": hashlib.sha256((out / "workloads.json").read_bytes()).hexdigest(),
               "engines": {}, "records": []}
     save = lambda: (out / "report.json").write_text(json.dumps(report, indent=2))
@@ -133,26 +153,36 @@ def main():
                                     "--format=csv", "-l", "1"], stdout=gpu_log, stderr=subprocess.STDOUT)
         try:
             for mode in args.modes:
-                backend = "ninfer" if mode.startswith("ninfer") else mode
+                backend = "ninfer" if mode.startswith("ninfer") else "exl3" if mode.startswith("exl3") else mode
                 with socket.socket() as sock:
                     sock.bind(("127.0.0.1", 0))
                     port = sock.getsockname()[1]
                 env = dict(os.environ, HOST="127.0.0.1", PORT=str(port), CONTEXT=os.environ["CROSS_CONTEXT"],
                            VISION="on" if args.vision else "off", NINFER_PREFIX_REUSE="on",
-                           NINFER_SPEC="dflash2" if mode.endswith("dflash5") else "mtp",
-                           NINFER_DRAFT="5" if mode.endswith("dflash5") else os.environ["CROSS_MTP_DRAFT"], MTP="inline",
+                           NINFER_SPEC="dflash2" if mode.startswith("ninfer-dflash") else "mtp",
+                           NINFER_DRAFT={"ninfer-dflash5": "5", "ninfer-dflash7": "7"}.get(mode, os.environ["CROSS_MTP_DRAFT"]), MTP="inline",
                            LLAMACPP_BUILD=os.environ["CROSS_LLAMA_BUILD"],
                            LLAMACPP_SERVER=os.environ["CROSS_LLAMA_BUILD"] + "/bin/llama-server",
                            GGUF_WEIGHTS=os.environ["CROSS_GGUF"], VISION_WEIGHTS=os.environ["CROSS_MMPROJ"],
-                           LLAMACPP_UI="off")
+                           LLAMACPP_UI="off", EXL3_SPEC="dflash2" if mode == "exl3-dflash2" else "mtp")
                 cmd = [str(ROOT / "run.sh"), "serve", backend]
                 if backend == "llamacpp":
-                    cmd += ["--jinja", "--reasoning-budget", "0"]
+                    cmd += ["--jinja"]
+                    if not thinking:
+                        cmd += ["--reasoning-budget", "0"]
                 elif backend == "ninfer":
                     cmd += ["--request-log-jsonl", str(out / f"{mode}-requests.jsonl")]
                 dry = subprocess.check_output(cmd, env=dict(env, DRY_RUN="1"), text=True).strip()
+                source = Path(os.environ["EXL3_SOURCE"]) if backend == "exl3" else ROOT / "backends" / backend
                 report["engines"][mode] = {"command": dry, "revision": bench.capture(
-                    ["git", "-C", str(ROOT / "backends" / backend), "rev-parse", "HEAD"])}
+                    ["git", "-C", str(source), "rev-parse", "HEAD"])}
+                if backend == "exl3":
+                    report["engines"][mode].update(
+                        kit_revision=bench.capture(["git", "-C", os.environ["EXL3_KIT"], "rev-parse", "HEAD"]),
+                        target_revision=os.environ["EXL3_WEIGHTS_REVISION"],
+                        draft_revision=os.environ["EXL3_DRAFT_REVISION"],
+                        metrics_patch_sha256=hashlib.sha256((ROOT / "patches/mia-exl3-benchmark-metrics.patch").read_bytes()).hexdigest(),
+                        environment=bench.capture(["uv", "pip", "freeze", "--python", os.environ["EXL3_ENV"] + "/bin/python"]))
                 with (out / f"{mode}.log").open("w") as log:
                     server = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
                     try:
@@ -161,14 +191,16 @@ def main():
                         model = get_json(url + "/v1/models")["data"][0]["id"]
                         base = dict(model=model, temperature=0, top_p=1, top_k=0, min_p=0,
                                     seed=42, presence_penalty=0, frequency_penalty=0,
-                                    reasoning_effort="none", chat_template_kwargs={"enable_thinking": False},
+                                    chat_template_kwargs={"enable_thinking": thinking},
                                     stream=True, stream_options={"include_usage": True}, cache_prompt=True)
+                        if not thinking:
+                            base["reasoning_effort"] = "none"
                         bench.request(url, dict(base, messages=[{"role": "user", "content": "Count from one to twenty."}],
                                                 max_tokens=int(os.environ["CROSS_WARMUP_TOKENS"])), timeout)
                         for repeat in range(int(os.environ["CROSS_REPEATS"])):
                             for label, original, tokens, expected, warm in cases:
                                 # A leading unique system message prevents accidental prefix reuse.
-                                messages = [{"role": "system", "content": f"Independent evaluation {label} trial {repeat}. Follow the user's task."}] + original
+                                messages = trial_messages(original, label, repeat)
                                 for state in (["cold", "warm"] if warm else ["cold"]):
                                     before = metrics(url) if backend == "q27" else {}
                                     result = bench.request(url, dict(base, messages=messages, max_tokens=tokens), timeout)
@@ -180,8 +212,10 @@ def main():
                                     elif cached is None:
                                         cached = result["server_timings"].get("cache_n")
                                     tpot = result["client_tpot_seconds"]
+                                    gpu_memory = bench.capture(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"])
                                     row = dict(mode=mode, fixture=label, repeat=repeat, cache_request=state,
                                                cached_tokens=cached, max_tokens=tokens, metrics_delta=deltas,
+                                               gpu_memory_used_mib=gpu_memory,
                                                answer_pass=check_answer(result["text"], expected),
                                                client_decode_tokens_per_second=1 / tpot if tpot else None, **result)
                                     report["records"].append(row)
