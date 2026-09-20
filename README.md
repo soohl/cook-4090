@@ -1,66 +1,101 @@
+<p align="center">
+  <img src="assets/cook-4090.png" alt="An orange cat chef cooks an RTX 4090 in a flaming frying pan." width="480">
+</p>
+
 # cook-4090
 
-Qwen3.8-27B on one RTX 4090 with NInfer and llama.cpp.
+Get more from one RTX 4090. Run local chat, generate and edit images, and compare
+inference engines through the lightweight cook-4090 Gradio UI.
 
-NInfer is pinned to the RTX 4090 port in `soohl/ninfer`. llama.cpp is pinned
-to the tested upstream revision. Clone both submodules with:
+The project targets Qwen3.8-27B and Qwen-Image-2.1 on Linux with CUDA 12.8.
+NInfer and llama.cpp provide LLM inference. Diffusers provides image generation
+with reference images and native 2K presets. One worker owns the GPU at a time.
+Build, serving, and benchmark defaults are visible in [run.sh](run.sh).
 
-```sh
-git clone --recurse-submodules https://github.com/soohl/cook-4090.git
-# Existing checkout:
-git submodule update --init
-```
+The application blocks outbound internet connections. Chats, uploads, images,
+reports, and logs clear on restart. Download results that you want to keep.
+Install dependencies and download models before you start the offline runtime.
 
-## Weights
+## Setup
 
-Place the model files at these ignored paths:
+Use Linux, an RTX 4090, a compatible NVIDIA driver, Git, `uv`, and
+`libseccomp.so.2`. Image weights need about 33.1 GB of disk space, in addition
+to the environment and caches. Image tests used 60 GiB of host RAM and reached
+about 32 GiB of process memory. This is not a minimum host-memory specification.
 
-```text
-models/qwen3_8_27b.ninfer
-models/Qwen3.8-27B-UD-IQ4_XS.gguf
-models/mtp-Qwen3.8-27B-Q4_0.gguf
-models/mmproj-Qwen3.8-27B-Q8_0.gguf
-```
+1. Clone the repository and its engine submodules.
 
-All build and server flags are visible at the top of `run.sh`. Override a
-setting in the environment for one experiment.
+   ```sh
+   git clone --recurse-submodules https://github.com/soohl/cook-4090.git
+   ```
 
-## Run
+2. Enter the repository.
 
-```sh
-./run.sh setup ninfer
-./run.sh setup llamacpp
+   ```sh
+   cd cook-4090
+   ```
 
-./run.sh serve ninfer
-./run.sh serve llamacpp
-```
+3. Install the pinned UI and image dependencies.
 
-Stop one server before starting the other. Both expose `qwen3.8-27b` at
-`http://127.0.0.1:8080/v1`.
+   ```sh
+   ./run.sh image-setup
+   ```
 
-Defaults: 256K context, one request, vision, and MTP. NInfer uses E8 KV/MTP3.
-llama.cpp uses Q4_0 KV/MTP4.
+4. Download the image model.
 
-## Benchmark
+   ```sh
+   ./run.sh image-download
+   ```
 
-```sh
-./run.sh benchmark
-```
+5. Start cook-4090.
 
-The same near-256K request runs through both engines with prompt caching
-disabled. A quality pass requires the exact answer
-`ORCHID=493817; COLOR=COBALT`. The report also includes TTFT, TPOT, latency,
-throughput, tokens, MTP acceptance, versions, and GPU.
+   ```sh
+   ./run.sh ui
+   ```
 
-Each run replaces:
+Open `http://<server-LAN-IP>:7860` from the same LAN, or
+`http://127.0.0.1:7860` on the server. No desktop session is needed.
+The UI is unauthenticated and intended for a private LAN.
+Stop separately launched GPU servers before you use it.
 
-```text
-results/
-├── report.json
-└── logs/
-    ├── ninfer.log
-    └── llamacpp.log
-```
+## LLM engines
 
-Set `BENCHMARK_WARMUP=1` and `BENCHMARK_REPEATS=3` in `run.sh` for final
-measurements. The retrieval marker checks 256K operation, not broad knowledge.
+Build an engine with `./run.sh setup ninfer` or `./run.sh setup llamacpp`.
+These commands require the CUDA/C++ toolchain and do not download weights.
+See the [NInfer build requirements](backends/ninfer/CMakeLists.txt),
+[NInfer model card](backends/ninfer/model-cards/Qwen3.8-27B-NInfer/README.md), and
+[llama.cpp build guide](backends/llamacpp/docs/build.md).
+Set `CUDA_ROOT` if the toolkit is not at `/usr/local/cuda-12.8`.
+
+Supply local weights through `NINFER_WEIGHTS` or `GGUF_WEIGHTS`.
+Default paths are in `run.sh`. The llama.cpp profile expects an embedded
+multi-token prediction (MTP) head; set `MTP=off` for weights without one.
+Configure profiles in [config/models.json](config/models.json).
+Restart the UI after configuration changes. The Models tab lists missing artifacts.
+
+## Commands and references
+
+- `./run.sh serve ninfer` or `./run.sh serve llamacpp`: standalone LLM API at
+  `http://127.0.0.1:8080/v1`. Unlike the default UI profiles, these commands enable
+  vision and require the corresponding vision artifacts.
+- `./run.sh image`: generate an image and retain its files under `results/qwen-image/`.
+- Use the **Benchmarks** tab for matched LLM comparisons and downloadable results.
+- `./run.sh test`: run CPU-only application checks.
+- `./run.sh help`: list commands and configuration options.
+- [Ada implementation and measurements](backends/ninfer/docs/ada.md).
+
+## Layout and model storage
+
+- `src/`: UI, inference adapters, and GUI benchmarking.
+- `config/models.json`: local model profiles.
+- `models/`: downloaded weights. Qwen-Image-2.1 uses `models/qwen-image-2.1/`.
+  Default LLM paths are `models/dflash2/qwen3_8_27b.ninfer` and
+  `models/comparison/unsloth/Qwen3.8-27B-UD-Q4_K_XL.gguf`.
+- `assets/`: shared README and UI artwork.
+- `tests/`: CPU and browser checks.
+- `build/`: environments, caches, and disposable UI sessions.
+
+Model weights, builds, CLI image results, and local `docs/` notes are ignored by Git.
+The repository includes an empty `models/` directory for local weights.
+The repository uses the [Apache 2.0 license](LICENSE). Engines and models retain
+their own licenses. Qwen-Image-2.1 uses the Qwen Research License.

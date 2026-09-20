@@ -4,4 +4,5 @@
 	branch = master
 [submodule "backends/llamacpp"]
 	path = backends/llamacpp
-	url = https://github.com/ggml-org/llama.cpp.git
+	url = https://github.com/soohl/llama.cpp.git
+	branch = cook-4090

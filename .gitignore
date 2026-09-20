@@ -1,10 +1,13 @@
 **/.deps
-/models/
+/models/*
+!/models/.gitkeep
 /build/
+/.venv-vision/
+/results/
+/docs/
 __pycache__/
 *.py[cod]
 *.gguf
 *.ninfer
 *.safetensors
 *.log
-!/results/logs/*.log

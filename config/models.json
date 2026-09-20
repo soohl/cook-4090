@@ -1,0 +1,47 @@
+[
+  {
+    "id": "qwen38-ninfer",
+    "label": "Qwen3.8-27B · NInfer MTP",
+    "kind": "chat",
+    "engine": "ninfer",
+    "source": "backends/ninfer",
+    "required_env": [
+      "NINFER_SERVER",
+      "NINFER_WEIGHTS"
+    ],
+    "env": {
+      "VISION": "off",
+      "NINFER_SPEC": "mtp"
+    },
+    "args": []
+  },
+  {
+    "id": "qwen38-llamacpp",
+    "label": "Qwen3.8-27B · llama.cpp MTP",
+    "kind": "chat",
+    "engine": "llamacpp",
+    "source": "backends/llamacpp",
+    "required_env": [
+      "LLAMACPP_SERVER",
+      "GGUF_WEIGHTS"
+    ],
+    "env": {
+      "VISION": "off",
+      "LLAMACPP_UI": "off"
+    },
+    "args": [
+      "--jinja"
+    ]
+  },
+  {
+    "id": "qwen-image21",
+    "label": "Qwen-Image-2.1 · Diffusers BF16",
+    "kind": "image",
+    "engine": "diffusers",
+    "required_env": [
+      "IMAGE_WEIGHTS"
+    ],
+    "env": {},
+    "args": []
+  }
+]
