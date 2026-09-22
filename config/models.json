@@ -43,5 +43,15 @@
     ],
     "env": {},
     "args": []
+  },
+  {
+    "id": "qwen-image21-sglang",
+    "label": "Qwen-Image-2.1 · SGLang BF16",
+    "kind": "image",
+    "engine": "sglang",
+    "source": "build/sglang-source",
+    "required_env": ["IMAGE_WEIGHTS", "SGLANG_PYTHON", "SGLANG_OFFLINE_LIB"],
+    "env": {},
+    "args": []
   }
 ]

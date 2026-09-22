@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,11 +15,20 @@ from unittest.mock import patch
 
 from src import benchmarks, client, images
 from src.manager import Manager
-from src.registry import ROOT
+from src.registry import ROOT, load_registry
 from src.runtime import Runtime
 
 
 class ImageTests(unittest.TestCase):
+    def test_image_profiles_support_both_engines_and_reject_chat_mismatch(self):
+        registry = load_registry(ROOT / "config/models.json")
+        self.assertEqual({p["engine"] for p in registry.values() if p["kind"] == "image"}, {"diffusers", "sglang"})
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "models.json"
+            path.write_text(json.dumps([{"id": "bad", "kind": "chat", "engine": "sglang"}]))
+            with self.assertRaisesRegex(ValueError, "Unsupported engine"):
+                load_registry(path)
+
     def test_native_presets_and_model_specific_resolution_validation(self):
         native = {"2048x2048", "2400x1792", "1792x2400", "2528x1696",
                   "1696x2528", "2752x1536", "1536x2752"}
@@ -66,6 +76,37 @@ class RuntimeTests(unittest.TestCase):
 
 
 class OfflineTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("cc"), "Native offline guard requires a C compiler")
+    def test_native_local_ipc_allows_local_workers_and_rejects_internet(self):
+        with tempfile.TemporaryDirectory() as directory:
+            guard = Path(directory) / "connect.so"
+            subprocess.run(["cc", "-shared", "-fPIC", str(ROOT / "src/offline_connect.c"), "-ldl", "-o", str(guard)], check=True)
+            code = """
+import socket, subprocess, sys
+with socket.socket() as listener:
+    listener.bind(('127.0.0.1', 0)); listener.listen()
+    with socket.create_connection(listener.getsockname()): pass
+with socket.socket(socket.AF_UNIX) as listener:
+    listener.bind('\\0cook-4090-test-' + str(__import__('os').getpid())); listener.listen()
+    with socket.socket(socket.AF_UNIX) as client: client.connect(listener.getsockname())
+for address in [('192.0.2.1', 443), ('2001:db8::1', 443), ('::ffff:192.0.2.1', 443)]:
+    family = socket.AF_INET6 if ':' in address[0] else socket.AF_INET
+    with socket.socket(family) as client:
+        try: client.connect(address)
+        except PermissionError: pass
+        else: raise AssertionError('Internet connect allowed')
+try: socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+except PermissionError: pass
+else: raise AssertionError('Internet datagram allowed')
+child = subprocess.run([sys.executable, '-c', "import socket; socket.socket().connect(('192.0.2.1', 443))"], capture_output=True)
+assert child.returncode != 0 and b'Operation not permitted' in child.stderr
+print('pass')
+"""
+            result = subprocess.run([sys.executable, "-m", "src.offline", "--local-ipc", sys.executable, "-c", code],
+                                    cwd=ROOT, env=dict(os.environ, SGLANG_OFFLINE_LIB=str(guard)),
+                                    capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def execute(self, code, worker=False):
         command = [sys.executable, "-c", code]
         if worker:
@@ -125,6 +166,29 @@ class StreamTests(unittest.TestCase):
 
 
 class ManagerTests(unittest.TestCase):
+    def test_image_engines_route_to_their_environment_and_release_workers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profiles = {engine: {"kind": "image", "engine": engine, "label": engine, "required_env": []}
+                        for engine in ("diffusers", "sglang")}
+            manager = Manager(profiles, directory)
+            env = dict(os.environ, SGLANG_PYTHON=sys.executable)
+            calls = []
+            real_spawn = manager.spawn
+
+            def spawn(command, child_env, log, local_ipc=False):
+                calls.append((command[0], child_env["IMAGE_ENGINE"], local_ipc))
+                return real_spawn([sys.executable, "-c", "pass"], child_env, log)
+
+            try:
+                with patch.object(manager, "spawn", side_effect=spawn):
+                    for engine in profiles:
+                        manager.run_image(engine, env, Path(directory) / (engine + ".log"))
+                        self.assertIsNone(manager.process)
+                        self.assertIsNone(manager.active)
+                self.assertEqual(calls, [(sys.executable, "diffusers", False), (sys.executable, "sglang", True)])
+            finally:
+                manager.close()
+
     def test_switch_reaps_previous_worker_and_reuses_matching_profile(self):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))

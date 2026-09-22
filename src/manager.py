@@ -49,7 +49,7 @@ class Manager:
                 process.wait(timeout=15)
         self.process = self.active = self.model = self.context = None
 
-    def spawn(self, command, env, log_path):
+    def spawn(self, command, env, log_path, local_ipc=False):
         if self.closed:
             raise RuntimeError("cook-4090 is shutting down")
         env = dict(env, **environment(), PYTHONUNBUFFERED="1")
@@ -57,7 +57,7 @@ class Manager:
         env.update(TMPDIR=str(self.runtime), GRADIO_TEMP_DIR=str(self.runtime / "gradio"))
         with open(log_path, "w") as log:
             self.process = subprocess.Popen(
-                [sys.executable, "-m", "src.offline", *command], cwd=ROOT, env=env,
+                [sys.executable, "-m", "src.offline", *(["--local-ipc"] if local_ipc else []), *command], cwd=ROOT, env=env,
                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
             )
         return self.process
@@ -110,10 +110,17 @@ class Manager:
             raise
 
     def run_image(self, key, env, log):
+        profile = self.registry[key]
+        if profile["kind"] != "image" or availability(profile) != "Installed":
+            raise ValueError("Choose an installed image model")
+        engine = profile["engine"]
+        env = dict(env, IMAGE_ENGINE=engine)
+        python = env["SGLANG_PYTHON"] if engine == "sglang" else sys.executable
+        env["PATH"] = str(Path(python).parent) + os.pathsep + env["PATH"]
         self.stop()
         self.active = key
-        process = self.spawn([sys.executable, "-u", "-m", "src.image_worker"], env, log)
         try:
+            process = self.spawn([python, "-u", "-m", "src.image_worker"], env, log, local_ipc=engine == "sglang")
             code = process.wait(timeout=int(os.environ["IMAGE_UI_TIMEOUT"]))
             if code:
                 raise RuntimeError("Image generation failed: " + Path(log).read_text(errors="replace")[-1400:])

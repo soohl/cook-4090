@@ -21,7 +21,8 @@ def is_local(host):
     if host == "localhost":
         return True
     try:
-        return ipaddress.ip_address(host).is_loopback
+        address = ipaddress.ip_address(host)
+        return address.is_loopback or bool(getattr(address, "ipv4_mapped", None) and address.ipv4_mapped.is_loopback)
     except ValueError:
         return False
 
@@ -45,8 +46,8 @@ def restrict_ui_network():
     sys.addaudithook(audit)
 
 
-def restrict_worker_network():
-    """Linux seccomp: workers may listen/reply, but cannot initiate connections or UDP."""
+def restrict_worker_network(local_ipc=False):
+    """Block connects and Internet datagrams; local IPC uses the native connect guard."""
     lib = ctypes.CDLL("libseccomp.so.2", use_errno=True)
     lib.seccomp_init.argtypes = [ctypes.c_uint32]
     lib.seccomp_init.restype = ctypes.c_void_p
@@ -65,7 +66,7 @@ def restrict_worker_network():
         raise RuntimeError("Cannot initialize offline worker filter")
     deny = 0x00050000 | errno.EPERM
     try:
-        for name in (b"connect",):
+        for name in (() if local_ipc else (b"connect",)):
             if lib.seccomp_rule_add(ctx, deny, lib.seccomp_syscall_resolve_name(name), 0) < 0:
                 raise RuntimeError("Cannot deny outbound connections")
         for family in (socket.AF_INET, socket.AF_INET6):
@@ -87,5 +88,14 @@ if __name__ == "__main__":
     if libc.prctl(1, signal.SIGTERM, 0, 0, 0) != 0 or os.getppid() == 1:
         raise RuntimeError("Cannot attach worker lifetime to UI")
     os.environ.update(environment())
-    restrict_worker_network()
-    os.execvpe(sys.argv[1], sys.argv[1:], os.environ)
+    command = sys.argv[1:]
+    local_ipc = command[0] == "--local-ipc"
+    if local_ipc:
+        from pathlib import Path
+        command = command[1:]
+        guard = Path(os.environ["SGLANG_OFFLINE_LIB"]).resolve(strict=True)
+        ctypes.CDLL(str(guard)).connect  # Fail before exec if the guard is not loadable.
+        os.environ["LD_PRELOAD"] = str(guard) + (":" + os.environ["LD_PRELOAD"] if os.environ.get("LD_PRELOAD") else "")
+        os.environ.update(NCCL_SOCKET_IFNAME="lo", GLOO_SOCKET_IFNAME="lo")
+    restrict_worker_network(local_ipc=local_ipc)
+    os.execvpe(command[0], command, os.environ)

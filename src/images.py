@@ -1,4 +1,4 @@
-"""Reference-image validation and delegation to the existing diffusion runner."""
+"""Validate image requests and delegate to the selected inference engine."""
 
 import json
 import os

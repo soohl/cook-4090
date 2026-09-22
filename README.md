@@ -7,9 +7,10 @@
 Get more from one RTX 4090. Run local chat, generate and edit images, and compare
 inference engines through the lightweight cook-4090 Gradio UI.
 
-The project targets Qwen3.8-27B and Qwen-Image-2.1 on Linux with CUDA 12.8.
-NInfer and llama.cpp provide LLM inference. Diffusers provides image generation
-with reference images and native 2K presets. One worker owns the GPU at a time.
+The project targets Qwen3.8-27B and Qwen-Image-2.1 on Linux with NVIDIA CUDA.
+NInfer and llama.cpp provide LLM inference. Diffusers and optional SGLang provide
+image generation with reference images and native 2K presets. One worker owns
+the GPU at a time.
 Build, serving, and benchmark defaults are visible in [run.sh](run.sh).
 
 The application blocks outbound internet connections. Chats, uploads, images,
@@ -58,6 +59,12 @@ Open `http://<server-LAN-IP>:7860` from the same LAN, or
 The UI is unauthenticated and intended for a private LAN.
 Stop separately launched GPU servers before you use it.
 
+To add SGLang, run `./run.sh image-sglang-setup` with a C compiler available.
+It installs a separate environment and reuses the same BF16 image weights.
+Use a driver compatible with that environment's CUDA runtime. Restart the UI,
+then select **Qwen-Image-2.1 · SGLang BF16** in the Images tab. Diffusers remains
+the default. Each image request releases its worker when it finishes.
+
 ## LLM engines
 
 Build an engine with `./run.sh setup ninfer` or `./run.sh setup llamacpp`.
@@ -79,6 +86,7 @@ Restart the UI after configuration changes. The Models tab lists missing artifac
   `http://127.0.0.1:8080/v1`. Unlike the default UI profiles, these commands enable
   vision and require the corresponding vision artifacts.
 - `./run.sh image`: generate an image and retain its files under `results/qwen-image/`.
+- `IMAGE_ENGINE=sglang ./run.sh image`: use SGLang for the same image command.
 - Use the **Benchmarks** tab for matched LLM comparisons and downloadable results.
 - `./run.sh test`: run CPU-only application checks.
 - `./run.sh help`: list commands and configuration options.

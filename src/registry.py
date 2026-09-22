@@ -14,7 +14,8 @@ def load_registry(path):
         key = profile["id"]
         if key in registry or profile["kind"] not in {"chat", "image"}:
             raise ValueError(f"Invalid/duplicate model profile: {key}")
-        if profile["engine"] not in {"ninfer", "llamacpp", "diffusers"}:
+        engines = {"chat": {"ninfer", "llamacpp"}, "image": {"diffusers", "sglang"}}
+        if profile["engine"] not in engines[profile["kind"]]:
             raise ValueError(f"Unsupported engine: {profile['engine']}")
         registry[key] = profile
     return registry

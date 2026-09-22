@@ -1,7 +1,7 @@
 # cook-4090 rules
 
 - Target Qwen3.8-27B and Qwen-Image-2.1 on one RTX 4090.
-- Support NInfer and llama.cpp for LLMs. Use Diffusers for image generation.
+- Support NInfer and llama.cpp for LLMs. Use Diffusers and SGLang for images.
 - Keep all build, serve, and benchmark defaults visible in `run.sh`.
 - Keep cook-4090 offline at runtime. Clear UI artifacts
   on restart. Keep model and engine adapters separate from UI code.

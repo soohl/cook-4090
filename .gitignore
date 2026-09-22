@@ -2,6 +2,7 @@
 /models/*
 !/models/.gitkeep
 /build/
+/backends/stable-diffusion.cpp/
 /.venv-vision/
 /results/
 /docs/

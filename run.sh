@@ -23,7 +23,8 @@ UI_BENCH_SEED=${UI_BENCH_SEED:-42}
 UI_BENCH_CACHE=${UI_BENCH_CACHE:-cold}
 UI_BENCH_PROMPT=${UI_BENCH_PROMPT:-'Explain how a hash table works, including collisions and resizing, with a short Python example.'}
 
-# Qwen-Image-2.1: isolated BF16 diffusion experiment with component CPU offload.
+# Qwen-Image-2.1: BF16 image engines with CPU offload.
+IMAGE_ENGINE=${IMAGE_ENGINE:-diffusers} # diffusers or sglang
 IMAGE_ENV=${IMAGE_ENV:-"$ROOT/build/qwen-image-venv"}
 IMAGE_CACHE=${IMAGE_CACHE:-"$ROOT/build/qwen-image-cache"}
 IMAGE_WEIGHTS=${IMAGE_WEIGHTS:-"$ROOT/models/qwen-image-2.1"}
@@ -54,6 +55,15 @@ IMAGE_SEED=${IMAGE_SEED:-42}
 IMAGE_PROMPT=${IMAGE_PROMPT:-'A neon shop sign that reads "QWEN IMAGE 2.1", rainy night, reflections on wet pavement'}
 IMAGE_OUTPUT=${IMAGE_OUTPUT:-"$ROOT/results/qwen-image/$(date -u +%Y%m%dT%H%M%SZ)"}
 
+# Optional native SGLang image engine. Reuse the original BF16 checkpoint.
+SGLANG_SOURCE=${SGLANG_SOURCE:-"$ROOT/build/sglang-source"}
+SGLANG_ENV=${SGLANG_ENV:-"$ROOT/build/sglang-venv"}
+SGLANG_REVISION=018b73c7a06261bd70a77ddfc402c736bcb2333d
+SGLANG_PACKAGE=0.5.20
+SGLANG_PYTHON="$SGLANG_ENV/bin/python"
+SGLANG_OFFLINE_LIB=${SGLANG_OFFLINE_LIB:-"$ROOT/build/offline-connect.so"}
+SGLANG_ATTENTION=${SGLANG_ATTENTION:-fa}
+SGLANG_RESIDENCY=${SGLANG_RESIDENCY:-text_encoder=layerwise-offload}
 # Best known RTX 4090 configuration. Edit these values for an experiment.
 MODEL_ID=${MODEL_ID:-qwen3.8-27b}
 HOST=${HOST:-127.0.0.1}
@@ -253,7 +263,9 @@ Usage:
   ./run.sh image-setup # isolated pinned Diffusers environment
   ./run.sh image-download # pinned official BF16 weights (~33 GB)
   ./run.sh image # 1024x1024, 40 steps, seed 42, model CPU offload
+  IMAGE_ENGINE=sglang ./run.sh image # same weights with native SGLang
   ./run.sh image-ui # compatibility alias for ./run.sh ui
+  ./run.sh image-sglang-setup # optional SGLang image environment and pinned source
   IMAGE_PROMPT='A capybara reading a book' ./run.sh image
   ./run.sh setup {ninfer|llamacpp}
   ./run.sh serve {ninfer|llamacpp}
@@ -275,6 +287,23 @@ EOF
 action=${1:-}
 shift || true
 case "$action" in
+    image-sglang-setup)
+        need uv
+        need cc
+        if [[ ! -d "$SGLANG_SOURCE" ]]; then
+            git clone https://github.com/sgl-project/sglang.git "$SGLANG_SOURCE"
+            git -C "$SGLANG_SOURCE" checkout --detach "$SGLANG_REVISION"
+        fi
+        [[ $(git -C "$SGLANG_SOURCE" rev-parse HEAD) == "$SGLANG_REVISION" ]] || fail "SGLang revision mismatch"
+        [[ -x "$SGLANG_ENV/bin/python" ]] || uv venv --python 3.12 "$SGLANG_ENV"
+        uv pip install --python "$SGLANG_ENV/bin/python" "sglang[diffusion]==$SGLANG_PACKAGE" --prerelease=allow
+        uv pip install --python "$SGLANG_ENV/bin/python" setuptools setuptools-rust setuptools-scm wheel
+        SGLANG_BUILD_RUST_EXTS=none uv pip install --python "$SGLANG_ENV/bin/python" \
+            --no-build-isolation --prerelease=allow -e "$SGLANG_SOURCE/python[diffusion]"
+        mkdir -p "$(dirname "$SGLANG_OFFLINE_LIB")"
+        cc -shared -fPIC -O2 -Wall -Wextra "$ROOT/src/offline_connect.c" -ldl -o "$SGLANG_OFFLINE_LIB"
+        uv pip freeze --python "$SGLANG_ENV/bin/python" > "$SGLANG_ENV/requirements-resolved.txt"
+        ;;
     image-setup)
         need uv
         [[ -x "$IMAGE_ENV/bin/python" ]] || uv venv --python 3.11 "$IMAGE_ENV"
@@ -293,7 +322,8 @@ case "$action" in
     image|image-ui|ui|ui-test|test)
         [[ -x "$IMAGE_ENV/bin/python" ]] || fail "Run ./run.sh image-setup first."
         export HF_HOME="$IMAGE_CACHE/huggingface"
-        export IMAGE_WEIGHTS IMAGE_MODEL IMAGE_REVISION IMAGE_DIFFUSERS_REVISION
+        export IMAGE_ENGINE IMAGE_ENV IMAGE_WEIGHTS IMAGE_MODEL IMAGE_REVISION IMAGE_DIFFUSERS_REVISION
+        export SGLANG_SOURCE SGLANG_ENV SGLANG_PYTHON SGLANG_REVISION SGLANG_ATTENTION SGLANG_RESIDENCY SGLANG_OFFLINE_LIB
         export IMAGE_WIDTH IMAGE_HEIGHT IMAGE_STEPS IMAGE_SEED IMAGE_PROMPT IMAGE_OUTPUT
         export IMAGE_REFERENCES IMAGE_MAX_REFERENCES IMAGE_REFERENCE_RESOLUTION
         export IMAGE_VAE_TILING IMAGE_VAE_TILE_SIZE IMAGE_VAE_TILE_STRIDE
@@ -309,7 +339,14 @@ case "$action" in
             fi
             exec "$IMAGE_ENV/bin/python" -u -m src.app
         fi
-        exec "$IMAGE_ENV/bin/python" -u -m src.image_worker
+        case "$IMAGE_ENGINE" in
+            diffusers) exec "$IMAGE_ENV/bin/python" -m src.offline "$IMAGE_ENV/bin/python" -u -m src.image_worker ;;
+            sglang)
+                [[ -x "$SGLANG_PYTHON" && -f "$SGLANG_OFFLINE_LIB" ]] || fail "Run ./run.sh image-sglang-setup first."
+                export PATH="$SGLANG_ENV/bin:$PATH"
+                exec "$IMAGE_ENV/bin/python" -m src.offline --local-ipc "$SGLANG_PYTHON" -u -m src.image_worker ;;
+            *) fail "Unknown image engine: $IMAGE_ENGINE" ;;
+        esac
         ;;
     setup) setup "$@" ;;
     serve) serve "$@" ;;
