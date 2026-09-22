@@ -16,6 +16,7 @@ Build, serving, and benchmark defaults are visible in [run.sh](run.sh).
 The application blocks outbound internet connections. Chats, uploads, images,
 reports, and logs clear on restart. Download results that you want to keep.
 Install dependencies and download models before you start the offline runtime.
+All four engine sources are pinned Git submodules under `backends/`.
 
 ## Setup
 
@@ -65,6 +66,11 @@ Use a driver compatible with that environment's CUDA runtime. Restart the UI,
 then select **Qwen-Image-2.1 · SGLang BF16** in the Images tab. Diffusers remains
 the default. Each image request releases its worker when it finishes.
 
+For an existing checkout, run
+`git submodule update --init backends/diffusers backends/sglang`, then rerun
+`./run.sh image-setup` and any optional SGLang setup. These commands install
+the local engine sources into separate environments under `build/`.
+
 ## LLM engines
 
 Build an engine with `./run.sh setup ninfer` or `./run.sh setup llamacpp`.
@@ -96,6 +102,7 @@ Restart the UI after configuration changes. The Models tab lists missing artifac
 
 - `src/`: UI, inference adapters, and GUI benchmarking.
 - `config/models.json`: local model profiles.
+- `backends/`: pinned engine source submodules.
 - `models/`: downloaded weights. Qwen-Image-2.1 uses `models/qwen-image-2.1/`.
   Default LLM paths are `models/dflash2/qwen3_8_27b.ninfer` and
   `models/comparison/unsloth/Qwen3.8-27B-UD-Q4_K_XL.gguf`.

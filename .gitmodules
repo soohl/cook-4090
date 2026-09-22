@@ -6,3 +6,9 @@
 	path = backends/llamacpp
 	url = https://github.com/soohl/llama.cpp.git
 	branch = cook-4090
+[submodule "backends/sglang"]
+	path = backends/sglang
+	url = https://github.com/sgl-project/sglang.git
+[submodule "backends/diffusers"]
+	path = backends/diffusers
+	url = https://github.com/huggingface/diffusers.git

@@ -25,6 +25,7 @@ UI_BENCH_PROMPT=${UI_BENCH_PROMPT:-'Explain how a hash table works, including co
 
 # Qwen-Image-2.1: BF16 image engines with CPU offload.
 IMAGE_ENGINE=${IMAGE_ENGINE:-diffusers} # diffusers or sglang
+IMAGE_DIFFUSERS_SOURCE=${IMAGE_DIFFUSERS_SOURCE:-"$ROOT/backends/diffusers"}
 IMAGE_ENV=${IMAGE_ENV:-"$ROOT/build/qwen-image-venv"}
 IMAGE_CACHE=${IMAGE_CACHE:-"$ROOT/build/qwen-image-cache"}
 IMAGE_WEIGHTS=${IMAGE_WEIGHTS:-"$ROOT/models/qwen-image-2.1"}
@@ -56,7 +57,7 @@ IMAGE_PROMPT=${IMAGE_PROMPT:-'A neon shop sign that reads "QWEN IMAGE 2.1", rain
 IMAGE_OUTPUT=${IMAGE_OUTPUT:-"$ROOT/results/qwen-image/$(date -u +%Y%m%dT%H%M%SZ)"}
 
 # Optional native SGLang image engine. Reuse the original BF16 checkpoint.
-SGLANG_SOURCE=${SGLANG_SOURCE:-"$ROOT/build/sglang-source"}
+SGLANG_SOURCE=${SGLANG_SOURCE:-"$ROOT/backends/sglang"}
 SGLANG_ENV=${SGLANG_ENV:-"$ROOT/build/sglang-venv"}
 SGLANG_REVISION=018b73c7a06261bd70a77ddfc402c736bcb2333d
 SGLANG_PACKAGE=0.5.20
@@ -109,6 +110,13 @@ LLAMACPP_UI_GZIP=${LLAMACPP_UI_GZIP:-OFF} # embedded UI works without Accept-Enc
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "Missing tool: $1"; }
 quote() { printf '%q ' "$@"; printf '\n'; }
+
+check_image_source() {
+    local source=$1 revision=$2
+    need git
+    [[ -e "$source/.git" ]] || fail "Missing engine source: $source. Run git submodule update --init backends/diffusers backends/sglang."
+    [[ $(git -C "$source" rev-parse HEAD) == "$revision" ]] || fail "Engine revision mismatch: $source (expected $revision)."
+}
 
 serve() {
     local backend=${1:-}
@@ -290,11 +298,7 @@ case "$action" in
     image-sglang-setup)
         need uv
         need cc
-        if [[ ! -d "$SGLANG_SOURCE" ]]; then
-            git clone https://github.com/sgl-project/sglang.git "$SGLANG_SOURCE"
-            git -C "$SGLANG_SOURCE" checkout --detach "$SGLANG_REVISION"
-        fi
-        [[ $(git -C "$SGLANG_SOURCE" rev-parse HEAD) == "$SGLANG_REVISION" ]] || fail "SGLang revision mismatch"
+        check_image_source "$SGLANG_SOURCE" "$SGLANG_REVISION"
         [[ -x "$SGLANG_ENV/bin/python" ]] || uv venv --python 3.12 "$SGLANG_ENV"
         uv pip install --python "$SGLANG_ENV/bin/python" "sglang[diffusion]==$SGLANG_PACKAGE" --prerelease=allow
         uv pip install --python "$SGLANG_ENV/bin/python" setuptools setuptools-rust setuptools-scm wheel
@@ -306,10 +310,11 @@ case "$action" in
         ;;
     image-setup)
         need uv
+        check_image_source "$IMAGE_DIFFUSERS_SOURCE" "$IMAGE_DIFFUSERS_REVISION"
         [[ -x "$IMAGE_ENV/bin/python" ]] || uv venv --python 3.11 "$IMAGE_ENV"
         uv pip install --python "$IMAGE_ENV/bin/python" "torch==$IMAGE_TORCH" "torchvision==$IMAGE_TORCHVISION" --index-url "$IMAGE_TORCH_INDEX"
         uv pip install --python "$IMAGE_ENV/bin/python" \
-            "diffusers @ git+https://github.com/huggingface/diffusers@$IMAGE_DIFFUSERS_REVISION" \
+            -e "$IMAGE_DIFFUSERS_SOURCE" \
             "transformers==$IMAGE_TRANSFORMERS" "accelerate==$IMAGE_ACCELERATE" "pillow==$IMAGE_PILLOW" "gradio==$IMAGE_GRADIO"
         mkdir -p "$IMAGE_CACHE"
         uv pip freeze --python "$IMAGE_ENV/bin/python" > "$IMAGE_CACHE/requirements-resolved.txt"
@@ -322,7 +327,7 @@ case "$action" in
     image|image-ui|ui|ui-test|test)
         [[ -x "$IMAGE_ENV/bin/python" ]] || fail "Run ./run.sh image-setup first."
         export HF_HOME="$IMAGE_CACHE/huggingface"
-        export IMAGE_ENGINE IMAGE_ENV IMAGE_WEIGHTS IMAGE_MODEL IMAGE_REVISION IMAGE_DIFFUSERS_REVISION
+        export IMAGE_ENGINE IMAGE_ENV IMAGE_WEIGHTS IMAGE_MODEL IMAGE_REVISION IMAGE_DIFFUSERS_SOURCE IMAGE_DIFFUSERS_REVISION
         export SGLANG_SOURCE SGLANG_ENV SGLANG_PYTHON SGLANG_REVISION SGLANG_ATTENTION SGLANG_RESIDENCY SGLANG_OFFLINE_LIB
         export IMAGE_WIDTH IMAGE_HEIGHT IMAGE_STEPS IMAGE_SEED IMAGE_PROMPT IMAGE_OUTPUT
         export IMAGE_REFERENCES IMAGE_MAX_REFERENCES IMAGE_REFERENCE_RESOLUTION
