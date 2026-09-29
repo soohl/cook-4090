@@ -1,0 +1,14 @@
+**
+!config/
+!config/web-requirements.txt
+!config/web.Dockerfile
+!src/
+!src/__init__.py
+!src/image_web.py
+!src/image_history.py
+!src/offline.py
+
+!web/
+!web/**
+web/node_modules/
+web/dist/

@@ -1,0 +1,5 @@
+# Every image route, including API and assets, passes through authentication.
+reverse_proxy image-auth:4180 {
+	flush_interval -1
+	header_up Host {$FUNNEL_HOSTNAME}
+}

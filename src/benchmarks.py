@@ -1,4 +1,4 @@
-"""Matched UI benchmark workloads; exports are disposable until downloaded."""
+"""Matched terminal benchmark workloads; the caller retains reports."""
 
 import csv
 from datetime import datetime, timezone
@@ -30,8 +30,19 @@ def identity(profile):
         stat = path.stat()
         artifacts[key] = {"path": os.path.relpath(path, ROOT), "size_bytes": stat.st_size,
                           "mtime_ns": stat.st_mtime_ns}
-    return {"profile": profile, "artifacts": artifacts,
-            "source_revision": capture(["git", "-C", str(ROOT / profile["source"]), "rev-parse", "HEAD"])}
+    result = {"profile": profile, "artifacts": artifacts,
+              "source_revision": capture(["git", "-C", str(ROOT / profile["source"]), "rev-parse", "HEAD"])}
+    if profile.get("engine") == "exllamav3":
+        from .registry import exl3_shards
+        root = Path(env["EXL3_WEIGHTS"])
+        result["weight_bytes"] = sum(path.stat().st_size for path in exl3_shards(root))
+        result["model_metadata_sha256"] = {
+            name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+            for name in ("config.json", "quantization_config.json", "model.safetensors.index.json")
+            if (root / name).is_file()}
+        result["packages"] = capture([env["EXL3_PYTHON"], "-c",
+            "import importlib.metadata as m,json; print(json.dumps({p:m.version(p) for p in ('exllamav3','torch','tabbyAPI')}))"])
+    return result
 
 
 def run(manager, keys, prompt, tokens, repeats, cache, thinking, context):
@@ -46,7 +57,7 @@ def run(manager, keys, prompt, tokens, repeats, cache, thinking, context):
     report = {"created": datetime.now(timezone.utc).isoformat(), "status": "running",
               "settings": {"max_tokens": int(tokens), "repeats": int(repeats), "cache": cache,
                            "thinking": bool(thinking), "context": int(context), "temperature": 0,
-                           "seed": int(os.environ["UI_BENCH_SEED"]), "stream": True},
+                           "seed": int(os.environ["BENCH_SEED"]), "stream": True},
               "messages": [{"role": "user", "content": prompt}],
               "workload_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
               "cache_policy": "Fresh engine for every trial; warm mode runs the exact workload once before measuring. OS file cache uncontrolled.",
@@ -73,7 +84,7 @@ def run(manager, keys, prompt, tokens, repeats, cache, thinking, context):
                     yield rows, f"Loading {profile['label']} · trial {repeat + 1}/{repeats}", paths
                     load_seconds = manager.ensure_chat(key, int(context), fresh=True)
                     report["engines"][key]["command"] = manager.last_command
-                    body = payload(manager.model, report["messages"], tokens, 0, thinking, os.environ["UI_BENCH_SEED"])
+                    body = payload(manager.model, report["messages"], tokens, 0, thinking, os.environ["BENCH_SEED"])
                     body.update(top_p=1, top_k=0, min_p=0, presence_penalty=0, frequency_penalty=0)
                     warmup = None
                     if cache == "warm":

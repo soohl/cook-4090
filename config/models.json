@@ -1,7 +1,7 @@
 [
   {
     "id": "qwen38-ninfer",
-    "label": "Qwen3.8-27B · NInfer MTP",
+    "label": "Qwen3.8-27B \u00b7 NInfer MTP",
     "kind": "chat",
     "engine": "ninfer",
     "source": "backends/ninfer",
@@ -16,42 +16,24 @@
     "args": []
   },
   {
-    "id": "qwen38-llamacpp",
-    "label": "Qwen3.8-27B · llama.cpp MTP",
+    "id": "qwen38-exllamav3",
+    "label": "Qwen3.8-27B · EXL3 5bpw MTP",
     "kind": "chat",
-    "engine": "llamacpp",
-    "source": "backends/llamacpp",
-    "required_env": [
-      "LLAMACPP_SERVER",
-      "GGUF_WEIGHTS"
-    ],
-    "env": {
-      "VISION": "off",
-      "LLAMACPP_UI": "off"
-    },
-    "args": [
-      "--jinja"
-    ]
+    "engine": "exllamav3",
+    "source": "backends/tabbyapi",
+    "required_env": ["EXL3_PYTHON", "EXL3_SOURCE", "EXL3_WEIGHTS"],
+    "env": {},
+    "args": []
   },
   {
     "id": "qwen-image21",
-    "label": "Qwen-Image-2.1 · Diffusers BF16",
+    "label": "Qwen-Image-2.1 \u00b7 Diffusers",
     "kind": "image",
     "engine": "diffusers",
     "source": "backends/diffusers",
     "required_env": [
       "IMAGE_WEIGHTS"
     ],
-    "env": {},
-    "args": []
-  },
-  {
-    "id": "qwen-image21-sglang",
-    "label": "Qwen-Image-2.1 · SGLang BF16",
-    "kind": "image",
-    "engine": "sglang",
-    "source": "backends/sglang",
-    "required_env": ["IMAGE_WEIGHTS", "SGLANG_PYTHON", "SGLANG_OFFLINE_LIB"],
     "env": {},
     "args": []
   }

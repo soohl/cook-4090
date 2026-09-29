@@ -5,7 +5,7 @@ import os
 import signal
 import time
 
-from . import ROOT, benchmarks, client, images
+from . import ROOT, client, images
 from .manager import Manager
 from .offline import restrict_ui_network
 from .registry import availability, choices, load_registry
@@ -46,7 +46,7 @@ def build_ui(manager):
         with manager.lock:
             try:
                 manager.ensure_chat(key, int(context))
-                body = client.payload(manager.model, messages, tokens, temperature, thinking, os.environ["UI_BENCH_SEED"])
+                body = client.payload(manager.model, messages, tokens, temperature, thinking, os.environ["UI_SEED"])
                 emitted = 0
                 for event in client.stream(manager.url, body, int(os.environ["UI_REQUEST_TIMEOUT"])):
                     if not event["done"] and time.monotonic() - emitted < 0.08:
@@ -72,17 +72,10 @@ def build_ui(manager):
         except Exception as exc:
             raise gr.Error(str(exc)) from None
 
-    def benchmark(keys, prompt, tokens, repeats, cache, thinking, context):
-        try:
-            for rows, status, files in benchmarks.run(manager, keys, prompt, tokens, repeats, cache, thinking, context):
-                yield rows, status, files, manager.status()
-        except Exception as exc:
-            raise gr.Error(str(exc)) from None
-
     with gr.Blocks(title="cook-4090", analytics_enabled=False) as demo:
         gr.Markdown('''<div class="brand">
           <img src="/assets/cook-4090.png" alt="cook-4090 cat chef" width="112" height="112">
-          <div><h1>cook-4090</h1><p>Chat, create images, and compare local engines.</p>
+          <div><h1>cook-4090</h1><p>Chat and create images with local engines.</p>
           <p>Everything clears when the server restarts. Download anything you want to keep.</p></div>
         </div>''')
         with gr.Row():
@@ -138,25 +131,6 @@ def build_ui(manager):
                 generate.click(image, [image_model, image_prompt, size, steps, seed, refs],
                                [preview, image_status, image_report, active], api_name="generate_image", concurrency_id="gpu", concurrency_limit=1)
                 image_model.change(image_sizes, image_model, size, queue=False, api_name=False)
-            with gr.Tab("Benchmarks"):
-                gr.Markdown("Compare the same workload across model/engine profiles. Model loading is measured separately. Cold starts use a fresh engine; warm runs first repeat the exact workload. Settings and quantization differences are included in the export.")
-                models = gr.Dropdown(chat_models, value=[p[1] for p in chat_models[:2]], multiselect=True, label="Models / engines to compare")
-                workload = gr.Textbox(value=os.environ["UI_BENCH_PROMPT"], label="Matched workload", lines=4)
-                with gr.Row():
-                    bench_tokens = gr.Number(value=int(os.environ["UI_BENCH_TOKENS"]), precision=0, minimum=1, label="Maximum output tokens")
-                    repeats = gr.Number(value=int(os.environ["UI_BENCH_REPEATS"]), precision=0, minimum=1, maximum=10, label="Trials per engine")
-                    cache = gr.Dropdown([("Cold: fresh engine", "cold"), ("Warm: exact repeat", "warm")], value=os.environ["UI_BENCH_CACHE"], label="Cache state")
-                    bench_thinking = gr.Checkbox(value=os.environ["UI_THINKING"] == "on", label="Thinking for all models")
-                    bench_context = gr.Number(value=int(os.environ["UI_CONTEXT"]), precision=0, minimum=1024, label="Context capacity")
-                with gr.Row():
-                    run = gr.Button("Run comparison", variant="primary")
-                    cancel_bench = gr.Button("Stop comparison")
-                table = gr.Dataframe(headers=benchmarks.HEADERS, interactive=False, label="Measurements")
-                bench_status = gr.Textbox(label="Progress", interactive=False)
-                exports = gr.File(file_count="multiple", label="Download results (JSON + CSV)", interactive=False, height=110)
-                bench_event = run.click(benchmark, [models, workload, bench_tokens, repeats, cache, bench_thinking, bench_context],
-                                       [table, bench_status, exports, active], api_name="benchmark", concurrency_id="gpu", concurrency_limit=1)
-                cancel_bench.click(fn=None, cancels=[bench_event], queue=False)
             with gr.Tab("Models"):
                 gr.Markdown("Installed profiles are configured locally in `config/models.json`. Switching unloads the previous engine. The UI never downloads models or installs software.")
                 gr.Dataframe(headers=["Profile", "Type", "Engine", "Availability"],

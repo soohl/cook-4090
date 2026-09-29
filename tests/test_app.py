@@ -20,12 +20,12 @@ from src.runtime import Runtime
 
 
 class ImageTests(unittest.TestCase):
-    def test_image_profiles_support_both_engines_and_reject_chat_mismatch(self):
+    def test_image_profile_supports_diffusers_and_rejects_chat_mismatch(self):
         registry = load_registry(ROOT / "config/models.json")
-        self.assertEqual({p["engine"] for p in registry.values() if p["kind"] == "image"}, {"diffusers", "sglang"})
+        self.assertEqual({p["engine"] for p in registry.values() if p["kind"] == "image"}, {"diffusers"})
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "models.json"
-            path.write_text(json.dumps([{"id": "bad", "kind": "chat", "engine": "sglang"}]))
+            path.write_text(json.dumps([{"id": "bad", "kind": "chat", "engine": "diffusers"}]))
             with self.assertRaisesRegex(ValueError, "Unsupported engine"):
                 load_registry(path)
 
@@ -76,37 +76,6 @@ class RuntimeTests(unittest.TestCase):
 
 
 class OfflineTests(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("cc"), "Native offline guard requires a C compiler")
-    def test_native_local_ipc_allows_local_workers_and_rejects_internet(self):
-        with tempfile.TemporaryDirectory() as directory:
-            guard = Path(directory) / "connect.so"
-            subprocess.run(["cc", "-shared", "-fPIC", str(ROOT / "src/offline_connect.c"), "-ldl", "-o", str(guard)], check=True)
-            code = """
-import socket, subprocess, sys
-with socket.socket() as listener:
-    listener.bind(('127.0.0.1', 0)); listener.listen()
-    with socket.create_connection(listener.getsockname()): pass
-with socket.socket(socket.AF_UNIX) as listener:
-    listener.bind('\\0cook-4090-test-' + str(__import__('os').getpid())); listener.listen()
-    with socket.socket(socket.AF_UNIX) as client: client.connect(listener.getsockname())
-for address in [('192.0.2.1', 443), ('2001:db8::1', 443), ('::ffff:192.0.2.1', 443)]:
-    family = socket.AF_INET6 if ':' in address[0] else socket.AF_INET
-    with socket.socket(family) as client:
-        try: client.connect(address)
-        except PermissionError: pass
-        else: raise AssertionError('Internet connect allowed')
-try: socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-except PermissionError: pass
-else: raise AssertionError('Internet datagram allowed')
-child = subprocess.run([sys.executable, '-c', "import socket; socket.socket().connect(('192.0.2.1', 443))"], capture_output=True)
-assert child.returncode != 0 and b'Operation not permitted' in child.stderr
-print('pass')
-"""
-            result = subprocess.run([sys.executable, "-m", "src.offline", "--local-ipc", sys.executable, "-c", code],
-                                    cwd=ROOT, env=dict(os.environ, SGLANG_OFFLINE_LIB=str(guard)),
-                                    capture_output=True, text=True, timeout=15)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
     def execute(self, code, worker=False):
         command = [sys.executable, "-c", code]
         if worker:
@@ -169,14 +138,14 @@ class ManagerTests(unittest.TestCase):
     def test_image_engines_route_to_their_environment_and_release_workers(self):
         with tempfile.TemporaryDirectory() as directory:
             profiles = {engine: {"kind": "image", "engine": engine, "label": engine, "required_env": []}
-                        for engine in ("diffusers", "sglang")}
+                        for engine in ("diffusers",)}
             manager = Manager(profiles, directory)
-            env = dict(os.environ, SGLANG_PYTHON=sys.executable)
+            env = dict(os.environ, IMAGE_REUSE="off")
             calls = []
             real_spawn = manager.spawn
 
-            def spawn(command, child_env, log, local_ipc=False):
-                calls.append((command[0], child_env["IMAGE_ENGINE"], local_ipc))
+            def spawn(command, child_env, log):
+                calls.append((command[0], child_env["IMAGE_ENGINE"]))
                 return real_spawn([sys.executable, "-c", "pass"], child_env, log)
 
             try:
@@ -185,7 +154,77 @@ class ManagerTests(unittest.TestCase):
                         manager.run_image(engine, env, Path(directory) / (engine + ".log"))
                         self.assertIsNone(manager.process)
                         self.assertIsNone(manager.active)
-                self.assertEqual(calls, [(sys.executable, "diffusers", False), (sys.executable, "sglang", True)])
+                self.assertEqual(calls, [(sys.executable, "diffusers")])
+            finally:
+                manager.close()
+
+    def test_image_reuse_switch_failure_and_shutdown(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile = {"kind": "image", "engine": "diffusers", "label": "image", "required_env": []}
+            chat = {"kind": "chat", "engine": "ninfer", "label": "chat", "required_env": []}
+            manager = Manager({"image": profile, "chat": chat}, directory)
+            real_spawn = manager.spawn
+            workers = []
+
+            def spawn(command, env, log, pass_fds=()):
+                if not pass_fds:
+                    # ensure_chat must reap the image worker before it starts coding.
+                    self.assertTrue(all(p.poll() is not None for p in workers))
+                    raise RuntimeError("coding reached after image shutdown")
+                code = """
+import json, os, socket, time
+from pathlib import Path
+try:
+ socket.socket().connect(('127.0.0.1', 9))
+except PermissionError:
+ pass
+else:
+ raise AssertionError('offline filter missing')
+with socket.socket(fileno=int(os.environ['IMAGE_WORKER_FD'])) as control:
+ with control.makefile('r') as requests:
+  for line in requests:
+   request=json.loads(line)
+   if request.get('prompt')=='fail': raise RuntimeError('test failure')
+   if request.get('prompt')=='timeout': time.sleep(30)
+   Path(request['output']).write_text(json.dumps({'pid':os.getpid(), 'prompt':request.get('prompt')}))
+   control.sendall(b'\\x01')
+"""
+                process = real_spawn([sys.executable, "-c", code], env, log, pass_fds=pass_fds)
+                workers.append(process)
+                return process
+
+            env = dict(os.environ, IMAGE_REUSE="on", IMAGE_WEIGHTS="weights", IMAGE_ATTENTION="sdpa",
+                       IMAGE_QUANTIZATION="bf16", IMAGE_COMPILE="off",
+                       IMAGE_OUTPUT=str(Path(directory) / "result.json"), IMAGE_PROMPT="first")
+            log = Path(directory) / "worker.log"
+            try:
+                with patch.object(manager, "spawn", side_effect=spawn), patch.dict(os.environ, IMAGE_UI_TIMEOUT="1"):
+                    manager.run_image("image", env, log)
+                    first = manager.process
+                    manager.run_image("image", dict(env, IMAGE_PROMPT="second"), log)
+                    self.assertIs(manager.process, first)
+                    self.assertEqual(json.loads(Path(env["IMAGE_OUTPUT"]).read_text())["prompt"], "second")
+                    for change in ({"IMAGE_ATTENTION": "comfy-kitchen"},
+                                   {"IMAGE_QUANTIZATION": "int8-convrot"}, {"IMAGE_COMPILE": "on"}):
+                        previous = manager.process
+                        env.update(change)
+                        manager.run_image("image", env, log)
+                        self.assertIsNot(manager.process, previous)
+                        self.assertIsNotNone(previous.poll())
+                    with self.assertRaises(RuntimeError):
+                        manager.run_image("image", dict(env, IMAGE_PROMPT="fail"), log)
+                    self.assertIsNone(manager.process)
+                    self.assertIsNone(manager.image_control)
+                    with self.assertRaises((TimeoutError, RuntimeError)):
+                        manager.run_image("image", dict(env, IMAGE_PROMPT="timeout"), log)
+                    self.assertIsNone(manager.process)
+                    manager.run_image("image", env, log)
+                    with patch("subprocess.check_output", return_value="test"), self.assertRaisesRegex(RuntimeError, "coding reached"):
+                        manager.ensure_chat("chat", 1024)
+                    self.assertIsNone(manager.image_control)
+                    manager.run_image("image", env, log)
+                    manager.close()
+                    self.assertTrue(all(p.poll() is not None for p in workers))
             finally:
                 manager.close()
 
@@ -233,6 +272,27 @@ HTTPServer(('127.0.0.1',{port}),H).serve_forever()
 
 
 class BenchmarkTests(unittest.TestCase):
+    def test_foreground_workers_inherit_terminal_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            code = '''
+import os, sys
+from pathlib import Path
+from src.manager import Manager
+manager = Manager({}, sys.argv[1], live_logs=True)
+try:
+    process = manager.spawn([sys.executable, '-c', "import sys; print('stdout marker'); print('stderr marker', file=sys.stderr)"],
+                            os.environ, Path(sys.argv[1]) / 'engine.log')
+    assert process.wait(timeout=10) == 0
+finally:
+    manager.close()
+'''
+            result = subprocess.run([sys.executable, '-c', code, directory],
+                                    text=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('stdout marker', result.stdout)
+            self.assertIn('stderr marker', result.stdout)
+            self.assertFalse((Path(directory) / 'engine.log').exists())
+
     def test_matched_payloads_fresh_trials_and_downloads(self):
         class FakeManager:
             registry = {key: {"label": key, "source": ".", "required_env": []} for key in ("a", "b")}

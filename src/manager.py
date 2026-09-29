@@ -1,6 +1,7 @@
 """Own exactly one inference process group; callers hold the shared GPU lock."""
 
 import json
+from contextlib import nullcontext
 import os
 from pathlib import Path
 import signal
@@ -17,7 +18,7 @@ from .registry import ROOT, availability, profile_env
 
 
 class Manager:
-    def __init__(self, registry, runtime):
+    def __init__(self, registry, runtime, live_logs=False):
         self.registry, self.runtime = registry, Path(runtime)
         self.lock = threading.Lock()
         self.process = None
@@ -29,6 +30,10 @@ class Manager:
         self.url = f"http://127.0.0.1:{self.port}"
         self.closed = False
         self.last_command = None
+        self.live_logs = live_logs
+        self.image_control = None
+        self.image_signature = None
+        self.image_progress_path = None
 
     def status(self):
         if self.process is not None and self.process.poll() is None:
@@ -36,6 +41,11 @@ class Manager:
         return "No model loaded · GPU available"
 
     def stop(self):
+        self.image_progress_path = None
+        if self.image_control is not None:
+            self.image_control.close()
+            self.image_control = None
+        self.image_signature = None
         process = self.process
         if process is not None:
             try:
@@ -49,16 +59,18 @@ class Manager:
                 process.wait(timeout=15)
         self.process = self.active = self.model = self.context = None
 
-    def spawn(self, command, env, log_path, local_ipc=False):
+    def spawn(self, command, env, log_path, pass_fds=()):
         if self.closed:
             raise RuntimeError("cook-4090 is shutting down")
         env = dict(env, **environment(), PYTHONUNBUFFERED="1")
         # Keep transient library caches and temporary artifacts inside the session.
         env.update(TMPDIR=str(self.runtime), GRADIO_TEMP_DIR=str(self.runtime / "gradio"))
-        with open(log_path, "w") as log:
+        # Foreground inference inherits the terminal. Benchmarks retain worker logs.
+        with (nullcontext(None) if self.live_logs else open(log_path, "w")) as log:
             self.process = subprocess.Popen(
-                [sys.executable, "-m", "src.offline", *(["--local-ipc"] if local_ipc else []), *command], cwd=ROOT, env=env,
+                [sys.executable, "-m", "src.offline", *command], cwd=ROOT, env=env,
                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                pass_fds=pass_fds,
             )
         return self.process
 
@@ -94,7 +106,8 @@ class Manager:
         try:
             while time.monotonic() < deadline:
                 if process.poll() is not None:
-                    raise RuntimeError("Engine failed to start: " + log_path.read_text(errors="replace")[-1800:])
+                    detail = "See the inference terminal." if self.live_logs else log_path.read_text(errors="replace")[-1800:]
+                    raise RuntimeError("Engine failed to start: " + detail)
                 try:
                     with urllib.request.urlopen(self.url + "/v1/models", timeout=2) as response:
                         models = json.load(response).get("data", [])
@@ -115,17 +128,53 @@ class Manager:
             raise ValueError("Choose an installed image model")
         engine = profile["engine"]
         env = dict(env, IMAGE_ENGINE=engine)
-        python = env["SGLANG_PYTHON"] if engine == "sglang" else sys.executable
+        python = sys.executable
         env["PATH"] = str(Path(python).parent) + os.pathsep + env["PATH"]
-        self.stop()
-        self.active = key
+        reuse = env.get("IMAGE_REUSE", "off") == "on"
+        # Changes to pipeline construction need a new worker. Per-request settings
+        # (prompt, references, dimensions, steps, seed, tiling) travel over the socket.
+        signature = tuple(env.get(name) for name in
+                          ("IMAGE_ENGINE", "IMAGE_WEIGHTS", "IMAGE_ATTENTION", "IMAGE_QUANTIZATION",
+                           "IMAGE_COMPILE", "IMAGE_FF_CHUNK_SIZE", "IMAGE_DIFFUSERS_REVISION"))
         try:
-            process = self.spawn([python, "-u", "-m", "src.image_worker"], env, log, local_ipc=engine == "sglang")
-            code = process.wait(timeout=int(os.environ["IMAGE_UI_TIMEOUT"]))
-            if code:
-                raise RuntimeError("Image generation failed: " + Path(log).read_text(errors="replace")[-1400:])
-        finally:
+            if not (reuse and self.active == key and self.image_signature == signature
+                    and self.image_control is not None and self.process and self.process.poll() is None):
+                self.stop()
+                self.active = key
+                if reuse:
+                    self.image_control, child = socket.socketpair()
+                    try:
+                        env["IMAGE_WORKER_FD"] = str(child.fileno())
+                        self.spawn([python, "-u", "-m", "src.image_worker"], env, log, pass_fds=(child.fileno(),))
+                    finally:
+                        child.close()
+                    self.image_signature = signature
+                else:
+                    self.spawn([python, "-u", "-m", "src.image_worker"], env, log)
+            timeout = int(os.environ["IMAGE_UI_TIMEOUT"])
+            self.image_progress_path = Path(env["IMAGE_OUTPUT"]) / "progress.json"
+            if reuse:
+                request = {name.removeprefix("IMAGE_").lower(): value for name, value in env.items()
+                           if name.startswith("IMAGE_") and name != "IMAGE_WORKER_FD"}
+                self.image_control.settimeout(timeout)
+                self.image_control.sendall((json.dumps(request) + "\n").encode())
+                # One-byte acknowledgement avoids framing ambiguity on stream sockets.
+                complete = self.image_control.recv(1) == b"\x01"
+            else:
+                complete = self.process.wait(timeout=timeout) == 0
+            if not complete:
+                detail = "See the inference terminal." if self.live_logs else "See the image worker log."
+                raise RuntimeError("Image generation failed: " + detail)
+            if not reuse:
+                self.stop()
+        except (OSError, subprocess.TimeoutExpired) as exc:
             self.stop()
+            raise RuntimeError("Image worker stopped responding; see the inference log.") from exc
+        except BaseException:
+            self.stop()
+            raise
+        finally:
+            self.image_progress_path = None
 
     def close(self):
         self.closed = True

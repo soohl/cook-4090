@@ -4,12 +4,13 @@ import json
 import os
 from pathlib import Path
 import resource
+import socket
 import subprocess
 import time
+import traceback
 
 from .offline import restrict_ui_network
 
-# This module is imported again by SGLang's spawned workers.
 restrict_ui_network()
 
 import diffusers
@@ -18,11 +19,10 @@ import transformers
 from PIL import Image, ImageOps
 
 
-def main():
-    config = {key.removeprefix("IMAGE_").lower(): value for key, value in os.environ.items() if key.startswith("IMAGE_")}
+def generate(config, engine=None):
     engine_name = config["engine"]
-    if engine_name not in {"diffusers", "sglang"}:
-        raise ValueError("IMAGE_ENGINE must be diffusers or sglang")
+    if engine_name != "diffusers":
+        raise ValueError("IMAGE_ENGINE must be diffusers")
     width, height, steps, seed = (int(config[key]) for key in ("width", "height", "steps", "seed"))
     if width <= 0 or height <= 0 or width % 32 or height % 32 or steps <= 0:
         raise ValueError("Dimensions must be positive multiples of 32; steps must be positive")
@@ -37,14 +37,14 @@ def main():
     report = {
         "config": config, "engine": engine_name, "dtype": "bfloat16",
         "batch_size": 1, "true_cfg_scale": 1.0, "use_kv_cache": True,
-        "cache_state": "fresh process; local weights; no warmup; OS file cache uncontrolled",
+        "cache_state": ("reused pipeline" if engine else "fresh process; no warmup") + "; local weights; OS file cache uncontrolled",
+        "pipeline_reused": engine is not None,
         "torch": torch.__version__, "diffusers": diffusers.__version__,
         "transformers": transformers.__version__, "cuda": torch.version.cuda,
         "gpu": subprocess.check_output(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True).strip(),
         "gpu_before": subprocess.check_output(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,memory.used,power.limit", "--format=csv"], text=True).strip(),
     }
     started = time.perf_counter()
-    engine = None
     try:
         paths = json.loads(config.get("references", "[]"))
         if not isinstance(paths, list) or len(paths) > int(config["max_references"]):
@@ -60,15 +60,13 @@ def main():
             references.append(reference)
             report["references"].append({"file": saved.name, "size": list(reference.size), "mode": reference.mode})
         report["mode"] = "image_edit" if references else "text_to_image"
-        print(f"Loading local BF16 weights with {engine_name}", flush=True)
+        print(f"{'Reusing' if engine else 'Loading'} local weights with {engine_name} "
+              f"({config.get('quantization', 'bf16')}, {config.get('attention', 'sdpa')})", flush=True)
         report["image_latent_tokens"] = (width // 16) * (height // 16)
         report["vae_tiling"] = tiling == "on" or (tiling == "auto" and width * height > 1024**2)
-        if engine_name == "diffusers":
-            from .image_diffusers import DiffusersEngine
+        from .image_diffusers import DiffusersEngine
+        if engine is None:
             engine = DiffusersEngine(config, report)
-        else:
-            from .image_sglang import SGLangEngine
-            engine = SGLangEngine(config, report)
         report["load_seconds"] = time.perf_counter() - started
         if engine_name == "diffusers":
             torch.cuda.reset_peak_memory_stats()
@@ -85,8 +83,6 @@ def main():
         report.update(status="error", error=repr(exc))
         raise
     finally:
-        if engine is not None:
-            engine.close()
         report["total_seconds"] = time.perf_counter() - started
         if engine_name == "diffusers":
             report["peak_cuda_allocated_gib"] = torch.cuda.max_memory_allocated() / 2**30
@@ -95,7 +91,29 @@ def main():
                                                (resource.RUSAGE_SELF, resource.RUSAGE_CHILDREN)) / 2**20
         (output / "report.json").write_text(json.dumps(report, indent=2, default=str) + "\n")
         print(json.dumps(report, indent=2, default=str), flush=True)
+    return engine
+
+
+def main():
+    config = {key.removeprefix("IMAGE_").lower(): value for key, value in os.environ.items()
+              if key.startswith("IMAGE_") and key != "IMAGE_WORKER_FD"}
+    if "IMAGE_WORKER_FD" not in os.environ:
+        generate(config)
+        return
+    # A private inherited socket keeps control messages separate from engine logs.
+    # It has no listener, address, or network endpoint.
+    with socket.socket(fileno=int(os.environ["IMAGE_WORKER_FD"])) as control:
+        with control.makefile("r") as requests:
+            engine = None
+            for line in requests:
+                try:
+                    engine = generate(config | json.loads(line), engine)
+                except Exception:
+                    # Finish the diagnostic before EOF tells the owner to reap us.
+                    traceback.print_exc()
+                    return 1
+                control.sendall(b"\x01")
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,0 +1,113 @@
+name: cook-4090
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: ${STACK_LOG_MAX_SIZE:?Use ./run.sh stack}
+    max-file: "${STACK_LOG_MAX_FILES:?Use ./run.sh stack}"
+
+services:
+  tailscale:
+    logging: *logging
+    image: ${TAILSCALE_IMAGE:?Use ./run.sh stack}
+    entrypoint: [tailscaled]
+    command: [--tun=userspace-networking, --state=/var/lib/tailscale/tailscaled.state, --statedir=/var/lib/tailscale, --socket=/var/run/tailscale/tailscaled.sock]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - tailscale-socket:/var/run/tailscale
+    ports:
+      - "${CODING_BIND:?Use ./run.sh stack}:8000:8000"
+    networks: [edge, application]
+    healthcheck:
+      test: [CMD-SHELL, 'test -S /var/run/tailscale/tailscaled.sock']
+      interval: 5s
+      timeout: 2s
+      retries: 12
+
+  caddy:
+    logging: *logging
+    image: ${CADDY_IMAGE:?Use ./run.sh stack}
+    network_mode: service:tailscale
+    restart: unless-stopped
+    cap_drop: [ALL]
+    # DAC_OVERRIDE permits the root proxy to connect to the host's mode-600 socket.
+    cap_add: [NET_BIND_SERVICE, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      FUNNEL_HOSTNAME: ${FUNNEL_HOSTNAME:?Set FUNNEL_HOSTNAME in .env}
+      CODING_API_KEY: ${CODING_API_KEY:?Set CODING_API_KEY in .env}
+      STACK_MAX_BODY: ${STACK_MAX_BODY:?Use ./run.sh stack}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tailscale-socket:/var/run/tailscale:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      - type: bind
+        source: ../build/stack-ipc
+        target: /inference
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on: [tailscale]
+
+  image-web:
+    logging: *logging
+    build:
+      context: ..
+      dockerfile: config/web.Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?Use ./run.sh stack}
+        NODE_IMAGE: ${NODE_IMAGE:?Use ./run.sh}
+    user: "${STACK_UID:?Use ./run.sh stack}:${STACK_GID:?Use ./run.sh stack}"
+    command: [python, -m, src.image_web]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    environment:
+      INFERENCE_SOCKET: /inference/inference.sock
+      STACK_MAX_BODY: ${STACK_MAX_BODY:?Use ./run.sh stack}
+      IMAGE_WEB_TIMEOUT: ${IMAGE_WEB_TIMEOUT:?Use ./run.sh stack}
+      IMAGE_WEB_PORT: ${IMAGE_WEB_PORT:?Use ./run.sh stack}
+      IMAGE_WEB_CONNECTIONS: ${IMAGE_WEB_CONNECTIONS:?Use ./run.sh stack}
+      UI_QUEUE: ${UI_QUEUE:?Use ./run.sh stack}
+      IMAGE_PUBLIC_URL: https://${FUNNEL_HOSTNAME}
+      IMAGE_HISTORY_DIR: /data/images
+    healthcheck:
+      test: [CMD, python, -c, 'import os, urllib.request; urllib.request.urlopen("http://127.0.0.1:" + os.environ["IMAGE_WEB_PORT"] + "/healthz", timeout=4).close()']
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      pocket-id-init:
+        condition: service_completed_successfully
+    networks: [application]
+    volumes:
+      - image-history:/data/images
+      - type: bind
+        source: ../build/stack-ipc
+        target: /inference
+        read_only: true
+        bind:
+          create_host_path: false
+
+networks:
+  edge: {}
+  application:
+    internal: true
+
+volumes:
+  image-history:
+  tailscale-state:
+  tailscale-socket:
+  caddy-data:
+  caddy-config:

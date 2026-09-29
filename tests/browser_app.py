@@ -44,7 +44,8 @@ def main():
         page.get_by_role("button", name="New chat", exact=True).click()
         expect(page.get_by_label("Message", exact=True)).to_have_value("")
         assert not page.evaluate("Object.keys(localStorage).filter(k=>k.startsWith('gradio:run-history:'))")
-        for tab in ("Images", "Benchmarks", "Models", "Chat"):
+        assert page.get_by_role("tab", name="Benchmarks", exact=True).count() == 0
+        for tab in ("Images", "Models", "Chat"):
             page.get_by_role("tab", name=tab, exact=True).click()
         assert not errors, errors
         assert not external, external

@@ -1,0 +1,115 @@
+x-logging: &logging
+  driver: local
+  options:
+    max-size: ${STACK_LOG_MAX_SIZE:?Use ./run.sh stack}
+    max-file: "${STACK_LOG_MAX_FILES:?Use ./run.sh stack}"
+
+services:
+  pocket-id-init:
+    logging: *logging
+    image: ${CADDY_IMAGE:?Use ./run.sh stack}
+    entrypoint: [/bin/sh, -ec]
+    command: ['chown 1000:1000 /identity && chmod 700 /identity && chown ${STACK_UID:?Use ./run.sh}:${STACK_GID:?Use ./run.sh} /images && chmod 700 /images']
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - pocket-id-data:/identity
+      - image-history:/images
+
+  caddy:
+    volumes:
+      - ./image-auth.caddy:/etc/caddy/image-auth.caddy:ro
+      - ./identity.caddy:/etc/caddy/identity.caddy:ro
+
+  pocket-id:
+    logging: *logging
+    image: ${POCKET_ID_IMAGE:?Use ./run.sh stack}
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    networks: [application]
+    environment:
+      ENCRYPTION_KEY: ${POCKET_ID_ENCRYPTION_KEY:?Set POCKET_ID_ENCRYPTION_KEY in .env}
+      APP_URL: https://${FUNNEL_HOSTNAME}:8443
+      INTERNAL_APP_URL: http://pocket-id:1411
+      TRUST_PROXY: "false"
+      ANALYTICS_DISABLED: "true"
+      VERSION_CHECK_DISABLED: "true"
+      UI_CONFIG_DISABLED: "true"
+      APP_NAME: cook-4090
+      ALLOW_USER_SIGNUPS: disabled
+      WEBAUTHN_USER_VERIFICATION: required
+      EMAIL_ONE_TIME_ACCESS_AS_UNAUTHENTICATED_ENABLED: "false"
+      EMAIL_ONE_TIME_ACCESS_AS_ADMIN_ENABLED: "false"
+    volumes:
+      - pocket-id-data:/app/data
+    depends_on:
+      pocket-id-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, /app/pocket-id, healthcheck]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  image-auth:
+    logging: *logging
+    image: ${OAUTH2_PROXY_IMAGE:?Use ./run.sh stack}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    networks: [application]
+    environment:
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_PROVIDER_DISPLAY_NAME: cook-4090 passkey
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_CLIENT_ID: ${OIDC_CLIENT_ID:-not-configured}
+      OAUTH2_PROXY_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-not-configured}
+      OAUTH2_PROXY_COOKIE_SECRET: ${IMAGE_COOKIE_SECRET:?Set IMAGE_COOKIE_SECRET in .env}
+      OAUTH2_PROXY_COOKIE_NAME: __Host-cook4090
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_COOKIE_HTTPONLY: "true"
+      OAUTH2_PROXY_COOKIE_SAMESITE: lax
+      OAUTH2_PROXY_COOKIE_EXPIRE: 8h
+      OAUTH2_PROXY_COOKIE_REFRESH: 1h
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_REDIRECT_URL: https://${FUNNEL_HOSTNAME}/oauth2/callback
+      OAUTH2_PROXY_OIDC_ISSUER_URL: https://${FUNNEL_HOSTNAME}:8443
+      # Keep token exchange and key retrieval on the private Docker network.
+      # Issuer, signatures, state, nonce, and PKCE still validate normally.
+      OAUTH2_PROXY_SKIP_OIDC_DISCOVERY: "true"
+      OAUTH2_PROXY_LOGIN_URL: https://${FUNNEL_HOSTNAME}:8443/authorize
+      OAUTH2_PROXY_REDEEM_URL: http://pocket-id:1411/api/oidc/token
+      OAUTH2_PROXY_PROFILE_URL: http://pocket-id:1411/api/oidc/userinfo
+      OAUTH2_PROXY_OIDC_JWKS_URL: http://pocket-id:1411/.well-known/jwks.json
+      OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256
+      OAUTH2_PROXY_SCOPE: openid email profile
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      # Only this separate, admin-controlled Pocket ID can assert identities.
+      OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL: "true"
+      OAUTH2_PROXY_UPSTREAMS: http://image-web:${IMAGE_WEB_PORT:?Use ./run.sh stack}
+      OAUTH2_PROXY_UPSTREAM_TIMEOUT: ${IMAGE_WEB_TIMEOUT:?Use ./run.sh stack}s
+      OAUTH2_PROXY_PASS_ACCESS_TOKEN: "false"
+      OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER: "false"
+      OAUTH2_PROXY_PASS_USER_HEADERS: "false"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_REQUEST_LOGGING: "false"
+      OAUTH2_PROXY_AUTH_LOGGING: "false"
+    depends_on:
+      pocket-id:
+        condition: service_healthy
+      image-web:
+        condition: service_healthy
+
+volumes:
+  pocket-id-data:

@@ -1,0 +1,50 @@
+{
+	admin off
+	auto_https disable_redirects
+	servers {
+		protocols h1 h2
+	}
+}
+
+# Docker publishes this listener only on the selected local address.
+# Tailscale Serve forwards private tailnet TCP port 8000 here.
+http://:8000 {
+	route {
+		@unauthorized expression `{http.request.header.Authorization} != "Bearer {$CODING_API_KEY}" && {http.request.header.X-Api-Key} != "{$CODING_API_KEY}"`
+		respond @unauthorized "Unauthorized" 401
+		# Remove keys before proxy errors can include request headers in logs.
+		request_header -X-Api-Key
+		request_header -Authorization
+		@coding {
+			path /v1/models /v1/chat/completions /v1/responses /v1/responses/input_tokens /v1/messages /v1/messages/count_tokens
+		}
+		reverse_proxy @coding unix//inference/inference.sock {
+			flush_interval -1
+			header_up -Authorization
+			header_up -X-Api-Key
+		}
+		respond "Not found" 404
+	}
+}
+
+# Funnel forwards raw TCP 443 to this loopback TLS listener.
+https://{$FUNNEL_HOSTNAME}:8443 {
+	bind 127.0.0.1
+	tls {
+		protocols tls1.3
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		-Server
+	}
+	request_body {
+		max_size {$STACK_MAX_BODY}
+	}
+	# Authentication is defined separately so it cannot affect the coding API.
+	import /etc/caddy/image-auth.caddy
+}
+
+import /etc/caddy/identity.caddy

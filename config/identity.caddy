@@ -1,0 +1,17 @@
+# Start with private Serve on 8443. Enable public Funnel only after enrollment.
+https://{$FUNNEL_HOSTNAME}:9443 {
+	bind 127.0.0.1
+	tls {
+		protocols tls1.3
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		-Server
+	}
+	reverse_proxy pocket-id:1411 {
+		header_up Host {$FUNNEL_HOSTNAME}:8443
+	}
+}
